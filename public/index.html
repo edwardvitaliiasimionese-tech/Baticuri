@@ -1,220 +1,126 @@
-<!doctype html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ma boutique</title>
-<style>
-:root{--bg:#f5f0ff;--card:#fff;--tx:#2e1065;--mut:#6b5b8a;--ac:#7c3aed;--acx:#fff;--bd:#e4d9f7}
-*{box-sizing:border-box}
-body{margin:0;min-height:100vh;background:linear-gradient(160deg,#3b0f7a,#7e22ce 55%,#c084fc) fixed;color:#fff;font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:18px 16px;max-width:1000px;margin:auto}
-h1{font:700 1.6rem/1.2 Georgia,serif;margin:0}
-.bar{display:flex;gap:8px;flex-wrap:wrap}
-button,.btn{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:9px 14px;border-radius:10px;text-decoration:none;display:inline-block;text-align:center}
-.pri{background:var(--ac);color:var(--acx);border-color:var(--ac);font-weight:600}
-.dng{color:#dc2626}
-main{max-width:1000px;margin:auto;padding:0 16px 30px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
-.gal{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;background:var(--bd)}
-.gal img{flex:0 0 100%;width:100%;aspect-ratio:1;object-fit:cover;scroll-snap-align:center}
-.nopic{aspect-ratio:1;display:grid;place-items:center;color:var(--mut)}
-.body{padding:14px;display:flex;flex-direction:column;gap:8px;flex:1}
-.body h2{margin:0;font-size:1.1rem}
-.body p{margin:0;color:var(--mut);white-space:pre-wrap;flex:1}
-.price{font-weight:700;font-size:1.2rem}
-.empty{grid-column:1/-1;text-align:center;color:var(--mut);padding:50px 0}
-footer{text-align:center;padding:0 0 30px}
-footer a{color:var(--mut);font-size:.8rem;cursor:pointer;text-decoration:underline}
-.ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:9}
-@media(min-width:600px){.ov{align-items:center}}
-.dlg{background:var(--card);width:100%;max-width:460px;max-height:92%;overflow:auto;border-radius:18px 18px 0 0;padding:20px}
-@media(min-width:600px){.dlg{border-radius:18px}}
-.dlg h3{margin:0 0 12px}
-label{display:block;font-size:.85rem;color:var(--mut);margin:10px 0 4px}
-input,textarea{width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
-.row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}.row>*{flex:1}
-.thumbs{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.thumbs img{width:56px;height:56px;object-fit:cover;border-radius:8px}
-.box{background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:12px;margin:10px 0}
-.box small{color:var(--mut);display:block}.box b{word-break:break-all}
-.note{color:var(--mut);font-size:.85rem}
-.card,.dlg{color:var(--tx)}
-h1{text-shadow:0 2px 12px rgba(0,0,0,.25)}
-.empty{color:rgba(255,255,255,.85)}
-footer a{color:rgba(255,255,255,.75)}
-header,main,footer{position:relative;z-index:1}
-#fall{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
-#fall span{position:absolute;top:-40px;animation:fall linear infinite;will-change:transform}
-@keyframes fall{from{transform:translateY(-10vh) rotate(0)}to{transform:translateY(115vh) rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){#fall{display:none}}
-.card.sold .gal,.card.sold .nopic{opacity:.4}
-button:disabled{opacity:.6;cursor:default}
-</style>
-</head>
-<body>
-<div id="fall"></div>
-<div id="root"></div>
-<footer id="foot"></footer>
-<script>
-const $=s=>document.querySelector(s);
-const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const eur=n=>new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n);
-let S={settings:{},items:[],orders:[]},admin=false,cart=[];
-try{cart=JSON.parse(localStorage.getItem('cart')||'[]');}catch(e){}
-const saveCart=()=>{try{localStorage.setItem('cart',JSON.stringify(cart));}catch(e){}};
-const oi=x=>x.items||[{id:x.itemId,title:x.title,price:x.price}];
-const ot=x=>x.total!=null?x.total:oi(x).reduce((t,i)=>t+i.price,0);
+const express = require('express'), multer = require('multer'), crypto = require('crypto'), path = require('path');
 
-async function api(url,opt){
-  const r=await fetch(url,opt);const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(j.error||'Erreur');return j;
-}
-async function refresh(){
-  S=await api('/api/shop');admin=(await api('/api/me')).admin;S.orders=admin?await api('/api/orders'):[];
-  cart=cart.filter(id=>S.items.some(i=>i.id===id&&!i.sold));saveCart();
-  document.title=S.settings.shop;render();
-}
-function modal(html){
-  const o=document.createElement('div');o.className='ov';o.innerHTML='<div class="dlg">'+html+'</div>';
-  o.addEventListener('click',e=>{if(e.target===o)o.remove();});document.body.appendChild(o);return o;
-}
-function resize(file){return new Promise(res=>{
-  const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{
-    const k=Math.min(1,1200/Math.max(i.width,i.height)),c=document.createElement('canvas');
-    c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);
-    c.toBlob(b=>res(b),'image/jpeg',.82);};i.onerror=()=>res(null);i.src=r.result;};
-  r.onerror=()=>res(null);r.readAsDataURL(file);});}
+const PORT = process.env.PORT || 3000;
+const PASS = process.env.ADMIN_PASSWORD;
+const URL_ = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+const KEY = process.env.SUPABASE_KEY;
+const BUCKET = process.env.SUPABASE_BUCKET || 'boutique';
+if (!PASS || !URL_ || !KEY) { console.error('Variables manquantes : ADMIN_PASSWORD, SUPABASE_URL, SUPABASE_KEY'); process.exit(1); }
 
-function render(){
-  const st=S.settings;
-  $('#root').innerHTML=
-   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Panier'+(cart.length?' ('+cart.length+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Article</button><button id="ord">Commandes'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="set">Réglages</button><button id="out">Déconnexion</button>':'')+'</div>'+'</header>'+
-   '<main>'+(S.items.length?S.items.map(it=>
-    '<div class="card'+(it.sold?' sold':'')+'">'+(it.imgs.length?'<div class="gal">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Pas de photo</div>')+
-    '<div class="body"><h2>'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+eur(it.price)+'</div>'+
-    (it.sold?'<button disabled>Vendu</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'Retirer du panier':'Ajouter au panier')+'</button>')+
-    (admin?'<button class="dng" data-del="'+esc(it.id)+'">Supprimer</button>':'')+'</div></div>').join('')
-    :'<div class="empty">Aucun article pour le moment.</div>')+'</main>';
-  $('#foot').innerHTML=admin?'':'<a id="login">Espace vendeur</a>';
-  if($('#login'))$('#login').onclick=loginForm;
-  if(admin){
-    $('#add').onclick=addForm;$('#ord').onclick=ordersView;$('#set').onclick=settings;
-    $('#out').onclick=async()=>{await api('/api/logout',{method:'POST'});refresh();};
-    document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
-      if(!confirm('Supprimer cet article ?'))return;
-      try{await api('/api/items/'+b.dataset.del,{method:'DELETE'});refresh();}catch(e){alert(e.message);}});
+const TOKEN = crypto.createHmac('sha256', crypto.createHash('sha256').update('s:' + PASS).digest('hex')).update('admin').digest('hex');
+const OBJ = `${URL_}/storage/v1/object`;
+const H = (extra = {}) => ({ apikey: KEY, ...(KEY.startsWith('eyJ') ? { Authorization: 'Bearer ' + KEY } : {}), ...extra });
+const DEFAULT = () => ({ settings: { shop: 'Ma boutique', holder: '', iban: '', wa: '' }, items: [], orders: [] });
+
+async function load() {
+  const r = await fetch(`${OBJ}/${BUCKET}/db.json?t=${Date.now()}`, { headers: H() });
+  if (r.ok) { const d = await r.json(); d.orders = d.orders || []; return d; }
+  if (r.status === 400 || r.status === 404) return DEFAULT();   // fichier pas encore créé
+  throw new Error('Lecture impossible (' + r.status + ')');
+}
+async function save(d) {
+  const r = await fetch(`${OBJ}/${BUCKET}/db.json`, { method: 'POST', headers: H({ 'Content-Type': 'application/json', 'x-upsert': 'true' }), body: JSON.stringify(d) });
+  if (!r.ok) throw new Error('Sauvegarde impossible (' + r.status + ')');
+}
+async function putImage(f) {
+  const name = crypto.randomBytes(12).toString('hex') + EXT[f.mimetype];
+  const r = await fetch(`${OBJ}/${BUCKET}/${name}`, { method: 'POST', headers: H({ 'Content-Type': f.mimetype }), body: f.buffer });
+  if (!r.ok) throw new Error('Envoi photo impossible (' + r.status + ')');
+  return `${OBJ}/public/${BUCKET}/${name}`;
+}
+const delImage = u => fetch(`${OBJ}/${BUCKET}/${path.basename(u)}`, { method: 'DELETE', headers: H() }).catch(() => {});
+
+function isAdmin(req) {
+  const m = /(?:^|;\s*)admin=([a-f0-9]+)/.exec(req.headers.cookie || '');
+  return !!m && m[1].length === TOKEN.length && crypto.timingSafeEqual(Buffer.from(m[1]), Buffer.from(TOKEN));
+}
+const needAdmin = (req, res, next) => isAdmin(req) ? next() : res.status(401).json({ error: 'Non autorisé' });
+const wrap = fn => (req, res) => fn(req, res).catch(e => res.status(500).json({ error: e.message }));
+
+const limiter = (max, ms) => { const m = new Map(); return (req, res, next) => {
+  const now = Date.now(), t = m.get(req.ip) || { n: 0, t: now };
+  if (now - t.t > ms) { t.n = 0; t.t = now; }
+  if (t.n >= max) return res.status(429).json({ error: 'Trop d\'essais, réessaie plus tard.' });
+  t.n++; m.set(req.ip, t); next(); }; };
+const throttle = limiter(10, 15 * 60e3);
+const orderLimit = limiter(20, 60 * 60e3);
+const oitems = o => o.items || [{ id: o.itemId, title: o.title, price: o.price }];
+const sync = d => d.items.forEach(it => { it.sold = d.orders.some(o => o.paid && oitems(o).some(i => i.id === it.id)); });
+
+const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 6 }, fileFilter: (req, f, cb) => cb(null, !!EXT[f.mimetype]) });
+
+const app = express();
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '50kb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: d.settings, items: d.items }); }));
+app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
+
+app.post('/api/login', throttle, (req, res) => {
+  const a = Buffer.from(String(req.body.password || '')), b = Buffer.from(PASS);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Mot de passe incorrect' });
+  res.cookie('admin', TOKEN, { httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 30 * 864e5, path: '/' });
+  res.json({ admin: true });
+});
+app.post('/api/logout', (req, res) => { res.clearCookie('admin', { path: '/' }); res.json({ admin: false }); });
+
+app.put('/api/settings', needAdmin, wrap(async (req, res) => {
+  const d = await load(), s = req.body || {}, c = (v, n) => String(v || '').trim().slice(0, n);
+  d.settings = { shop: c(s.shop, 60) || 'Ma boutique', holder: c(s.holder, 80), iban: c(s.iban, 40), wa: c(s.wa, 20) };
+  await save(d); res.json(d.settings);
+}));
+
+app.post('/api/items', needAdmin, upload.array('images', 6), wrap(async (req, res) => {
+  const title = String(req.body.title || '').trim().slice(0, 100), price = parseFloat(req.body.price);
+  if (!title || !isFinite(price) || price < 0) return res.status(400).json({ error: 'Titre et prix requis' });
+  const imgs = [];
+  for (const f of req.files || []) imgs.push(await putImage(f));
+  const d = await load();
+  const item = { id: crypto.randomBytes(6).toString('hex'), title, desc: String(req.body.desc || '').trim().slice(0, 2000), price, imgs };
+  d.items.unshift(item); await save(d); res.json(item);
+}));
+
+app.delete('/api/items/:id', needAdmin, wrap(async (req, res) => {
+  const d = await load(), it = d.items.find(x => x.id === req.params.id);
+  if (!it) return res.status(404).json({ error: 'Introuvable' });
+  d.items = d.items.filter(x => x !== it); await save(d);
+  it.imgs.forEach(delImage);
+  res.json({ ok: true });
+}));
+
+app.post('/api/orders', orderLimit, wrap(async (req, res) => {
+  const d = await load(), c = (v, n) => String(v || '').trim().slice(0, n);
+  const name = c(req.body.name, 80), phone = c(req.body.phone, 30);
+  const ids = [...new Set(Array.isArray(req.body.itemIds) ? req.body.itemIds.map(String) : [])].slice(0, 30);
+  if (!ids.length) return res.status(400).json({ error: 'Panier vide' });
+  if (!name || phone.length < 3) return res.status(400).json({ error: 'Nom et téléphone requis' });
+  const items = [];
+  for (const id of ids) {
+    const it = d.items.find(x => x.id === id);
+    if (!it) return res.status(404).json({ error: 'Un article du panier n\'existe plus' });
+    if (it.sold) return res.status(409).json({ error: '« ' + it.title + ' » est déjà vendu' });
+    items.push({ id: it.id, title: it.title, price: it.price });
   }
-  $('#cartb').onclick=cartView;
-  document.querySelectorAll('[data-cart]').forEach(b=>b.onclick=()=>{const id=b.dataset.cart;cart=cart.includes(id)?cart.filter(x=>x!==id):[...cart,id];saveCart();render();});
-}
+  if (d.orders.length >= 1000) return res.status(429).json({ error: 'Trop de commandes en attente' });
+  const total = Math.round(items.reduce((t, i) => t + i.price, 0) * 100) / 100;
+  d.orders.unshift({ id: crypto.randomBytes(6).toString('hex'), items, total, name, phone, date: new Date().toISOString(), paid: false });
+  await save(d); res.json({ ok: true, total });
+}));
 
-function loginForm(){
-  const o=modal('<h3>Espace vendeur</h3><label>Mot de passe</label><input id="pw" type="password" autocomplete="current-password"><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Entrer</button></div>');
-  const go=async()=>{try{await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:o.querySelector('#pw').value})});o.remove();refresh();}catch(e){alert(e.message);}};
-  o.querySelector('#no').onclick=()=>o.remove();o.querySelector('#ok').onclick=go;
-  o.querySelector('#pw').onkeydown=e=>{if(e.key==='Enter')go();};o.querySelector('#pw').focus();
-}
+app.get('/api/orders', needAdmin, wrap(async (req, res) => res.json((await load()).orders)));
 
-function cartView(){
-  const o=modal('');
-  const draw=()=>{
-    const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'';
-    const L=cart.map(id=>S.items.find(i=>i.id===id)).filter(Boolean),total=L.reduce((t,i)=>t+i.price,0);
-    o.querySelector('.dlg').innerHTML='<h3>Mon panier</h3>'+(L.length?
-      L.map(i=>'<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+'</small><button class="dng" style="margin-top:8px" data-rm="'+esc(i.id)+'">Retirer</button></div>').join('')+
-      '<div class="box"><small>Total à payer</small><b>'+eur(total)+'</b></div>'+
-      '<label>Ton nom</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Ton téléphone</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" value="'+esc(p0)+'">'+
-      '<div class="row"><button id="cl">Continuer mes achats</button><button class="pri" id="ok">Commander</button></div>'
-      :'<p class="note">Ton panier est vide.</p><div class="row"><button id="cl">Fermer</button></div>');
-    o.querySelector('#cl').onclick=()=>o.remove();
-    o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>x!==b.dataset.rm);saveCart();render();draw();});
-    const ok=o.querySelector('#ok');
-    if(ok)ok.onclick=async()=>{
-      const name=o.querySelector('#n').value.trim(),phone=o.querySelector('#ph').value.trim();
-      if(!name||phone.length<3){alert('Il faut ton nom et ton téléphone.');return;}
-      ok.disabled=true;ok.textContent='Envoi…';
-      try{
-        await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:cart,name,phone})});
-        cart=[];saveCart();o.remove();render();pay(L,total,name);
-      }catch(x){alert(x.message);await refresh();draw();}
-    };
-  };
-  draw();
-}
+app.put('/api/orders/:id', needAdmin, wrap(async (req, res) => {
+  const d = await load(), o = d.orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Introuvable' });
+  o.paid = !!req.body.paid; sync(d); await save(d); res.json(o);
+}));
 
-function pay(L,total,name){
-  const st=S.settings,ref=(L.length===1?L[0].title:L.length+' articles - '+name).slice(0,35);
-  const msg=encodeURIComponent('Bonjour, je viens de faire un virement de '+eur(total)+' pour : '+L.map(i=>i.title).join(', ')+'. Mon nom : '+name);
-  const wa=st.wa?'https://wa.me/'+st.wa.replace(/\D/g,'')+'?text='+msg:'';
-  const o=modal('<h3>Merci '+esc(name)+' !</h3><p>Ta commande est enregistrée ('+L.map(i=>esc(i.title)).join(', ')+'). Paie maintenant par virement bancaire, en une seule fois :</p>'+
-   (st.iban?'<div class="box"><small>Montant total</small><b>'+eur(total)+'</b></div><div class="box"><small>IBAN</small><b>'+esc(st.iban)+'</b></div>'+
-   (st.holder?'<div class="box"><small>Bénéficiaire</small><b>'+esc(st.holder)+'</b></div>':'')+
-   '<div class="box"><small>Communication</small><b>'+esc(ref)+'</b></div>'+
-   '<p class="note">Le vendeur confirmera ta commande dès que le virement sera arrivé.</p>':
-   '<p class="note">Le vendeur n\'a pas encore indiqué ses coordonnées bancaires, il te contactera.</p>')+
-   '<div class="row"><button id="cp">Copier l\'IBAN</button>'+(wa?'<a class="btn pri" target="_blank" rel="noopener" href="'+esc(wa)+'">Prévenir sur WhatsApp</a>':'')+'</div><div class="row"><button id="cl">Fermer</button></div>');
-  o.querySelector('#cl').onclick=()=>o.remove();
-  o.querySelector('#cp').onclick=async e=>{try{await navigator.clipboard.writeText(st.iban);e.target.textContent='Copié ✓';}catch(x){}};
-}
+app.delete('/api/orders/:id', needAdmin, wrap(async (req, res) => {
+  const d = await load();
+  d.orders = d.orders.filter(x => x.id !== req.params.id); sync(d); await save(d); res.json({ ok: true });
+}));
 
-function ordersView(){
-  const o=modal('');
-  const draw=()=>{
-    const L=S.orders;
-    o.querySelector('.dlg').innerHTML='<h3>Commandes</h3>'+(L.length?L.map(x=>
-     '<div class="box"><b>'+esc(oi(x).map(i=>i.title).join(', '))+' · '+eur(ot(x))+'</b><small>'+esc(x.name)+' · <a style="color:inherit" href="tel:'+esc(x.phone.replace(/[^\d+]/g,''))+'">'+esc(x.phone)+'</a></small><small>'+esc(new Date(x.date).toLocaleString('fr-BE'))+'</small>'+
-     '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Payé</label><button class="dng" data-rm="'+esc(x.id)+'">Supprimer</button></div></div>').join('')
-     :'<p class="note">Aucune commande pour le moment.</p>')+'<div class="row"><button id="cl">Fermer</button></div>';
-    o.querySelector('#cl').onclick=()=>o.remove();
-    o.querySelectorAll('[data-paid]').forEach(c=>c.onchange=async()=>{
-      try{await api('/api/orders/'+c.dataset.paid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({paid:c.checked})});await refresh();draw();}catch(e){alert(e.message);}});
-    o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{
-      if(!confirm('Supprimer cette commande ?'))return;
-      try{await api('/api/orders/'+b.dataset.rm,{method:'DELETE'});await refresh();draw();}catch(e){alert(e.message);}});
-  };
-  draw();
-}
-
-function addForm(){
-  let blobs=[];
-  const o=modal('<h3>Nouvel article</h3><label>Titre</label><input id="t"><label>Description</label><textarea id="d" rows="3"></textarea><label>Prix (€)</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal"><label>Photos (6 maximum)</label><input id="f" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Publier</button></div>');
-  o.querySelector('#no').onclick=()=>o.remove();
-  o.querySelector('#f').onchange=async e=>{
-    blobs=(await Promise.all([...e.target.files].slice(0,6).map(resize))).filter(Boolean);
-    o.querySelector('#th').innerHTML=blobs.map(b=>'<img src="'+URL.createObjectURL(b)+'">').join('');};
-  o.querySelector('#ok').onclick=async e=>{
-    const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
-    if(!t||p===''){alert('Il faut un titre et un prix.');return;}
-    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p);
-    blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
-    e.target.disabled=true;e.target.textContent='Envoi…';
-    try{await api('/api/items',{method:'POST',body:fd});o.remove();refresh();}
-    catch(x){alert(x.message);e.target.disabled=false;e.target.textContent='Publier';}
-  };
-}
-
-function settings(){
-  const st=S.settings;
-  const o=modal('<h3>Réglages</h3><label>Nom de la boutique</label><input id="s1" value="'+esc(st.shop)+'"><label>Titulaire du compte</label><input id="s2" value="'+esc(st.holder)+'"><label>IBAN</label><input id="s3" value="'+esc(st.iban)+'" placeholder="BE00 0000 0000 0000"><label>Numéro WhatsApp (avec indicatif, ex. 32470123456)</label><input id="s4" value="'+esc(st.wa)+'" inputmode="tel"><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Enregistrer</button></div>');
-  o.querySelector('#no').onclick=()=>o.remove();
-  o.querySelector('#ok').onclick=async()=>{
-    try{await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({shop:o.querySelector('#s1').value,holder:o.querySelector('#s2').value,iban:o.querySelector('#s3').value,wa:o.querySelector('#s4').value})});o.remove();refresh();}
-    catch(e){alert(e.message);}};
-}
-(function(){
-  const E=['💎','💍','📿','👑','✨','💜'],f=document.getElementById('fall');
-  for(let i=0;i<24;i++){
-    const e=document.createElement('span');
-    e.textContent=E[i%E.length];
-    e.style.left=(Math.random()*100)+'%';
-    e.style.fontSize=(16+Math.random()*20)+'px';
-    e.style.opacity=.45+Math.random()*.45;
-    e.style.animationDuration=(9+Math.random()*9)+'s';
-    e.style.animationDelay=(-Math.random()*18)+'s';
-    f.appendChild(e);
-  }
-})();
-refresh();
-</script>
-</body>
-</html>
+app.use((err, req, res, next) => res.status(400).json({ error: err.message || 'Erreur' }));
+app.listen(PORT, () => console.log('Boutique sur le port ' + PORT));
