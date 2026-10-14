@@ -55,7 +55,7 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: d.settings, items: d.items }); }));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop }, items: d.items }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
