@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ma boutique</title>
+<style>
+:root{--bg:#faf8f5;--card:#fff;--tx:#1d1b19;--mut:#6f6a63;--ac:#c2410c;--acx:#fff;--bd:#e7e2da}
+@media (prefers-color-scheme:dark){:root{--bg:#171614;--card:#222120;--tx:#f3efe9;--mut:#a29c93;--ac:#fb923c;--acx:#1d1b19;--bd:#37342f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:18px 16px;max-width:1000px;margin:auto}
+h1{font:700 1.6rem/1.2 Georgia,serif;margin:0}
+.bar{display:flex;gap:8px;flex-wrap:wrap}
+button,.btn{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:9px 14px;border-radius:10px;text-decoration:none;display:inline-block;text-align:center}
+.pri{background:var(--ac);color:var(--acx);border-color:var(--ac);font-weight:600}
+.dng{color:#dc2626}
+main{max-width:1000px;margin:auto;padding:0 16px 30px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.gal{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;background:var(--bd)}
+.gal img{flex:0 0 100%;width:100%;aspect-ratio:1;object-fit:cover;scroll-snap-align:center}
+.nopic{aspect-ratio:1;display:grid;place-items:center;color:var(--mut)}
+.body{padding:14px;display:flex;flex-direction:column;gap:8px;flex:1}
+.body h2{margin:0;font-size:1.1rem}
+.body p{margin:0;color:var(--mut);white-space:pre-wrap;flex:1}
+.price{font-weight:700;font-size:1.2rem}
+.empty{grid-column:1/-1;text-align:center;color:var(--mut);padding:50px 0}
+footer{text-align:center;padding:0 0 30px}
+footer a{color:var(--mut);font-size:.8rem;cursor:pointer;text-decoration:underline}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:9}
+@media(min-width:600px){.ov{align-items:center}}
+.dlg{background:var(--card);width:100%;max-width:460px;max-height:92%;overflow:auto;border-radius:18px 18px 0 0;padding:20px}
+@media(min-width:600px){.dlg{border-radius:18px}}
+.dlg h3{margin:0 0 12px}
+label{display:block;font-size:.85rem;color:var(--mut);margin:10px 0 4px}
+input,textarea{width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+.row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}.row>*{flex:1}
+.thumbs{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.thumbs img{width:56px;height:56px;object-fit:cover;border-radius:8px}
+.box{background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:12px;margin:10px 0}
+.box small{color:var(--mut);display:block}.box b{word-break:break-all}
+.note{color:var(--mut);font-size:.85rem}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<footer id="foot"></footer>
+<script>
+const $=s=>document.querySelector(s);
+const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eur=n=>new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n);
+let S={settings:{},items:[]},admin=false;
+
+async function api(url,opt){
+  const r=await fetch(url,opt);const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||'Erreur');return j;
+}
+async function refresh(){
+  S=await api('/api/shop');admin=(await api('/api/me')).admin;
+  document.title=S.settings.shop;render();
+}
+function modal(html){
+  const o=document.createElement('div');o.className='ov';o.innerHTML='<div class="dlg">'+html+'</div>';
+  o.addEventListener('click',e=>{if(e.target===o)o.remove();});document.body.appendChild(o);return o;
+}
+function resize(file){return new Promise(res=>{
+  const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{
+    const k=Math.min(1,1200/Math.max(i.width,i.height)),c=document.createElement('canvas');
+    c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);
+    c.toBlob(b=>res(b),'image/jpeg',.82);};i.onerror=()=>res(null);i.src=r.result;};
+  r.onerror=()=>res(null);r.readAsDataURL(file);});}
+
+function render(){
+  const st=S.settings;
+  $('#root').innerHTML=
+   '<header><h1>'+esc(st.shop)+'</h1>'+(admin?'<div class="bar"><button class="pri" id="add">+ Article</button><button id="set">Réglages</button><button id="out">Déconnexion</button></div>':'')+'</header>'+
+   '<main>'+(S.items.length?S.items.map(it=>
+    '<div class="card">'+(it.imgs.length?'<div class="gal">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Pas de photo</div>')+
+    '<div class="body"><h2>'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+eur(it.price)+'</div>'+
+    '<button class="pri" data-buy="'+esc(it.id)+'">Acheter</button>'+
+    (admin?'<button class="dng" data-del="'+esc(it.id)+'">Supprimer</button>':'')+'</div></div>').join('')
+    :'<div class="empty">Aucun article pour le moment.</div>')+'</main>';
+  $('#foot').innerHTML=admin?'':'<a id="login">Espace vendeur</a>';
+  if($('#login'))$('#login').onclick=loginForm;
+  if(admin){
+    $('#add').onclick=addForm;$('#set').onclick=settings;
+    $('#out').onclick=async()=>{await api('/api/logout',{method:'POST'});refresh();};
+    document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+      if(!confirm('Supprimer cet article ?'))return;
+      try{await api('/api/items/'+b.dataset.del,{method:'DELETE'});refresh();}catch(e){alert(e.message);}});
+  }
+  document.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buy(S.items.find(x=>x.id===b.dataset.buy)));
+}
+
+function loginForm(){
+  const o=modal('<h3>Espace vendeur</h3><label>Mot de passe</label><input id="pw" type="password" autocomplete="current-password"><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Entrer</button></div>');
+  const go=async()=>{try{await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:o.querySelector('#pw').value})});o.remove();refresh();}catch(e){alert(e.message);}};
+  o.querySelector('#no').onclick=()=>o.remove();o.querySelector('#ok').onclick=go;
+  o.querySelector('#pw').onkeydown=e=>{if(e.key==='Enter')go();};o.querySelector('#pw').focus();
+}
+
+function buy(it){
+  const st=S.settings,ref=it.title.slice(0,30);
+  const msg=encodeURIComponent('Bonjour, je viens de faire un virement de '+eur(it.price)+' pour : '+it.title+'. Mon nom : ');
+  const wa=st.wa?'https://wa.me/'+st.wa.replace(/\D/g,'')+'?text='+msg:'';
+  const o=modal('<h3>Acheter : '+esc(it.title)+'</h3><p>Paie par virement bancaire avec les informations ci-dessous.</p>'+
+   (st.iban?'<div class="box"><small>Montant</small><b>'+eur(it.price)+'</b></div><div class="box"><small>IBAN</small><b>'+esc(st.iban)+'</b></div>'+
+   (st.holder?'<div class="box"><small>Bénéficiaire</small><b>'+esc(st.holder)+'</b></div>':'')+
+   '<div class="box"><small>Communication</small><b>'+esc(ref)+'</b></div>'+
+   '<p class="note">Fais le virement dans ton application bancaire, puis préviens le vendeur pour qu\'il prépare ta commande.</p>':
+   '<p class="note">Le vendeur n\'a pas encore indiqué ses coordonnées bancaires.</p>')+
+   '<div class="row"><button id="cp">Copier l\'IBAN</button>'+(wa?'<a class="btn pri" target="_blank" rel="noopener" href="'+esc(wa)+'">Prévenir sur WhatsApp</a>':'')+'</div><div class="row"><button id="cl">Fermer</button></div>');
+  o.querySelector('#cl').onclick=()=>o.remove();
+  o.querySelector('#cp').onclick=async e=>{try{await navigator.clipboard.writeText(st.iban);e.target.textContent='Copié ✓';}catch(x){}};
+}
+
+function addForm(){
+  let blobs=[];
+  const o=modal('<h3>Nouvel article</h3><label>Titre</label><input id="t"><label>Description</label><textarea id="d" rows="3"></textarea><label>Prix (€)</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal"><label>Photos (6 maximum)</label><input id="f" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Publier</button></div>');
+  o.querySelector('#no').onclick=()=>o.remove();
+  o.querySelector('#f').onchange=async e=>{
+    blobs=(await Promise.all([...e.target.files].slice(0,6).map(resize))).filter(Boolean);
+    o.querySelector('#th').innerHTML=blobs.map(b=>'<img src="'+URL.createObjectURL(b)+'">').join('');};
+  o.querySelector('#ok').onclick=async e=>{
+    const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
+    if(!t||p===''){alert('Il faut un titre et un prix.');return;}
+    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p);
+    blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
+    e.target.disabled=true;e.target.textContent='Envoi…';
+    try{await api('/api/items',{method:'POST',body:fd});o.remove();refresh();}
+    catch(x){alert(x.message);e.target.disabled=false;e.target.textContent='Publier';}
+  };
+}
+
+function settings(){
+  const st=S.settings;
+  const o=modal('<h3>Réglages</h3><label>Nom de la boutique</label><input id="s1" value="'+esc(st.shop)+'"><label>Titulaire du compte</label><input id="s2" value="'+esc(st.holder)+'"><label>IBAN</label><input id="s3" value="'+esc(st.iban)+'" placeholder="BE00 0000 0000 0000"><label>Numéro WhatsApp (avec indicatif, ex. 32470123456)</label><input id="s4" value="'+esc(st.wa)+'" inputmode="tel"><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Enregistrer</button></div>');
+  o.querySelector('#no').onclick=()=>o.remove();
+  o.querySelector('#ok').onclick=async()=>{
+    try{await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({shop:o.querySelector('#s1').value,holder:o.querySelector('#s2').value,iban:o.querySelector('#s3').value,wa:o.querySelector('#s4').value})});o.remove();refresh();}
+    catch(e){alert(e.message);}};
+}
+refresh();
+</script>
+</body>
+</html>
