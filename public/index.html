@@ -177,9 +177,13 @@ function cartView(){
 }
 
 function pay(L,total,name,phone){
+  const wn=(S.settings.wa||'').replace(/\D/g,'');
+  const wa=wn?'https://wa.me/'+wn+'?text='+encodeURIComponent('Bonjour, j\'ai passé commande ('+L.map(i=>i.title).join(', ')+', total '+eur(total)+'). Mon nom : '+name):'';
   const o=modal('<h3>Merci '+esc(name)+' !</h3><p>Ta commande est bien enregistrée : '+L.map(i=>esc(i.title)).join(', ')+'.<br>Total : <b>'+eur(total)+'</b></p>'+
-   '<div class="box"><b>📲 Tu vas recevoir le numéro de compte (IBAN) en privé sur WhatsApp</b><small style="margin-top:6px">Le vendeur t\'écrit sur le numéro que tu as indiqué ('+esc(phone)+').</small></div>'+
-   '<p class="note">Fais le virement seulement après avoir reçu son message. Ta commande est confirmée dès que le paiement est arrivé.</p><div class="row"><button class="pri" id="cl">Fermer</button></div>');
+   '<div class="box"><b>💵 Paiement de préférence en cash</b><small style="margin-top:6px">Le vendeur te contacte pour s\'arranger avec toi.</small></div>'+
+   '<div class="box"><b>📲 Sinon, tu vas recevoir le numéro de compte (IBAN) en privé sur WhatsApp</b><small style="margin-top:6px">Le vendeur t\'écrit sur le numéro que tu as indiqué ('+esc(phone)+').</small></div>'+
+   '<p class="note">Si tu paies par virement, fais-le seulement après avoir reçu son message. Ta commande est confirmée dès que le paiement est reçu.</p>'+
+   '<div class="row">'+(wa?'<a class="btn" target="_blank" rel="noopener" href="'+esc(wa)+'">Écrire au vendeur sur WhatsApp</a>':'')+'<button class="pri" id="cl">Fermer</button></div>');
   o.querySelector('#cl').onclick=()=>o.remove();
 }
 
@@ -228,10 +232,10 @@ function addForm(){
 
 function settings(){
   const st=S.settings;
-  const o=modal('<h3>Réglages</h3><label>Nom de la boutique</label><input id="s1" value="'+esc(st.shop)+'"><label>Titulaire du compte (visible par toi seul)</label><input id="s2" value="'+esc(st.holder)+'"><label>IBAN (visible par toi seul)</label><input id="s3" value="'+esc(st.iban)+'" placeholder="BE00 0000 0000 0000"><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Enregistrer</button></div>');
+  const o=modal('<h3>Réglages</h3><label>Nom de la boutique</label><input id="s1" value="'+esc(st.shop)+'"><label>Ton numéro WhatsApp (avec indicatif, ex. 32470123456)</label><input id="s4" value="'+esc(st.wa)+'" inputmode="tel"><label>Titulaire du compte (visible par toi seul)</label><input id="s2" value="'+esc(st.holder)+'"><label>IBAN (visible par toi seul)</label><input id="s3" value="'+esc(st.iban)+'" placeholder="BE00 0000 0000 0000"><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Enregistrer</button></div>');
   o.querySelector('#no').onclick=()=>o.remove();
   o.querySelector('#ok').onclick=async()=>{
-    try{await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({shop:o.querySelector('#s1').value,holder:o.querySelector('#s2').value,iban:o.querySelector('#s3').value})});o.remove();refresh();}
+    try{await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({shop:o.querySelector('#s1').value,wa:o.querySelector('#s4').value,holder:o.querySelector('#s2').value,iban:o.querySelector('#s3').value})});o.remove();refresh();}
     catch(e){alert(e.message);}};
 }
 (function(){
