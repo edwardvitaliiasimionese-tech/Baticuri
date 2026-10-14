@@ -10,11 +10,11 @@ if (!PASS || !URL_ || !KEY) { console.error('Variables manquantes : ADMIN_PASSWO
 const TOKEN = crypto.createHmac('sha256', crypto.createHash('sha256').update('s:' + PASS).digest('hex')).update('admin').digest('hex');
 const OBJ = `${URL_}/storage/v1/object`;
 const H = (extra = {}) => ({ apikey: KEY, ...(KEY.startsWith('eyJ') ? { Authorization: 'Bearer ' + KEY } : {}), ...extra });
-const DEFAULT = () => ({ settings: { shop: 'Ma boutique', holder: '', iban: '', wa: '' }, items: [] });
+const DEFAULT = () => ({ settings: { shop: 'Ma boutique', holder: '', iban: '', wa: '' }, items: [], orders: [] });
 
 async function load() {
   const r = await fetch(`${OBJ}/${BUCKET}/db.json?t=${Date.now()}`, { headers: H() });
-  if (r.ok) return r.json();
+  if (r.ok) { const d = await r.json(); d.orders = d.orders || []; return d; }
   if (r.status === 400 || r.status === 404) return DEFAULT();   // fichier pas encore créé
   throw new Error('Lecture impossible (' + r.status + ')');
 }
@@ -37,13 +37,15 @@ function isAdmin(req) {
 const needAdmin = (req, res, next) => isAdmin(req) ? next() : res.status(401).json({ error: 'Non autorisé' });
 const wrap = fn => (req, res) => fn(req, res).catch(e => res.status(500).json({ error: e.message }));
 
-const tries = new Map();
-function throttle(req, res, next) {
-  const now = Date.now(), t = tries.get(req.ip) || { n: 0, t: now };
-  if (now - t.t > 15 * 60e3) { t.n = 0; t.t = now; }
-  if (t.n >= 10) return res.status(429).json({ error: 'Trop d\'essais, réessaie plus tard.' });
-  t.n++; tries.set(req.ip, t); next();
-}
+const limiter = (max, ms) => { const m = new Map(); return (req, res, next) => {
+  const now = Date.now(), t = m.get(req.ip) || { n: 0, t: now };
+  if (now - t.t > ms) { t.n = 0; t.t = now; }
+  if (t.n >= max) return res.status(429).json({ error: 'Trop d\'essais, réessaie plus tard.' });
+  t.n++; m.set(req.ip, t); next(); }; };
+const throttle = limiter(10, 15 * 60e3);
+const orderLimit = limiter(20, 60 * 60e3);
+const oitems = o => o.items || [{ id: o.itemId, title: o.title, price: o.price }];
+const sync = d => d.items.forEach(it => { it.sold = d.orders.some(o => o.paid && oitems(o).some(i => i.id === it.id)); });
 
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 6 }, fileFilter: (req, f, cb) => cb(null, !!EXT[f.mimetype]) });
@@ -53,7 +55,7 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => res.json(await load())));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: d.settings, items: d.items }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
@@ -86,6 +88,38 @@ app.delete('/api/items/:id', needAdmin, wrap(async (req, res) => {
   d.items = d.items.filter(x => x !== it); await save(d);
   it.imgs.forEach(delImage);
   res.json({ ok: true });
+}));
+
+app.post('/api/orders', orderLimit, wrap(async (req, res) => {
+  const d = await load(), c = (v, n) => String(v || '').trim().slice(0, n);
+  const name = c(req.body.name, 80), phone = c(req.body.phone, 30);
+  const ids = [...new Set(Array.isArray(req.body.itemIds) ? req.body.itemIds.map(String) : [])].slice(0, 30);
+  if (!ids.length) return res.status(400).json({ error: 'Panier vide' });
+  if (!name || phone.length < 3) return res.status(400).json({ error: 'Nom et téléphone requis' });
+  const items = [];
+  for (const id of ids) {
+    const it = d.items.find(x => x.id === id);
+    if (!it) return res.status(404).json({ error: 'Un article du panier n\'existe plus' });
+    if (it.sold) return res.status(409).json({ error: '« ' + it.title + ' » est déjà vendu' });
+    items.push({ id: it.id, title: it.title, price: it.price });
+  }
+  if (d.orders.length >= 1000) return res.status(429).json({ error: 'Trop de commandes en attente' });
+  const total = Math.round(items.reduce((t, i) => t + i.price, 0) * 100) / 100;
+  d.orders.unshift({ id: crypto.randomBytes(6).toString('hex'), items, total, name, phone, date: new Date().toISOString(), paid: false });
+  await save(d); res.json({ ok: true, total });
+}));
+
+app.get('/api/orders', needAdmin, wrap(async (req, res) => res.json((await load()).orders)));
+
+app.put('/api/orders/:id', needAdmin, wrap(async (req, res) => {
+  const d = await load(), o = d.orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Introuvable' });
+  o.paid = !!req.body.paid; sync(d); await save(d); res.json(o);
+}));
+
+app.delete('/api/orders/:id', needAdmin, wrap(async (req, res) => {
+  const d = await load();
+  d.orders = d.orders.filter(x => x.id !== req.params.id); sync(d); await save(d); res.json({ ok: true });
 }));
 
 app.use((err, req, res, next) => res.status(400).json({ error: err.message || 'Erreur' }));
