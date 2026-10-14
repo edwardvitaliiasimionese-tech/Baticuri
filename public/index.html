@@ -14,15 +14,20 @@ h1{font:700 1.6rem/1.2 Georgia,serif;margin:0}
 button,.btn{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:9px 14px;border-radius:10px;text-decoration:none;display:inline-block;text-align:center}
 .pri{background:var(--ac);color:var(--acx);border-color:var(--ac);font-weight:600}
 .dng{color:#dc2626}
-main{max-width:1000px;margin:auto;padding:0 16px 30px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+main{max-width:1000px;margin:auto;padding:0 12px 30px;display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px}
+@media(min-width:700px){main{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;padding:0 16px 30px}}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
 .gal{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;background:var(--bd)}
 .gal img{flex:0 0 100%;width:100%;aspect-ratio:1;object-fit:cover;scroll-snap-align:center}
 .nopic{aspect-ratio:1;display:grid;place-items:center;color:var(--mut)}
-.body{padding:14px;display:flex;flex-direction:column;gap:8px;flex:1}
-.body h2{margin:0;font-size:1.1rem}
-.body p{margin:0;color:var(--mut);white-space:pre-wrap;flex:1}
-.price{font-weight:700;font-size:1.2rem}
+.body{padding:8px;display:flex;flex-direction:column;gap:5px;flex:1}
+.body h2{margin:0;font-size:.82rem;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+.gal{cursor:pointer}
+.body button{padding:6px 4px;font-size:.78rem;border-radius:8px}
+@media(min-width:700px){.body h2{font-size:1rem}.body button{font-size:.9rem;padding:8px}}
+.body p{display:none}
+.price{font-weight:700;font-size:.95rem;flex:1}
+@media(min-width:700px){.price{font-size:1.15rem}}
 .empty{grid-column:1/-1;text-align:center;color:var(--mut);padding:50px 0}
 footer{text-align:center;padding:0 0 30px}
 footer a{color:var(--mut);font-size:.8rem;cursor:pointer;text-decoration:underline}
@@ -90,9 +95,9 @@ function render(){
   $('#root').innerHTML=
    '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Panier'+(cart.length?' ('+cart.length+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Article</button><button id="ord">Commandes'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="set">Réglages</button><button id="out">Déconnexion</button>':'')+'</div>'+'</header>'+
    '<main>'+(S.items.length?S.items.map(it=>
-    '<div class="card'+(it.sold?' sold':'')+'">'+(it.imgs.length?'<div class="gal">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Pas de photo</div>')+
-    '<div class="body"><h2>'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+eur(it.price)+'</div>'+
-    (it.sold?'<button disabled>Vendu</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'Retirer du panier':'Ajouter au panier')+'</button>')+
+    '<div class="card'+(it.sold?' sold':'')+'">'+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Pas de photo</div>')+
+    '<div class="body"><h2 data-open="'+esc(it.id)+'">'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+eur(it.price)+'</div>'+
+    (it.sold?'<button disabled>Vendu</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'✓ Ajouté':'＋ Panier')+'</button>')+
     (admin?'<button class="dng" data-del="'+esc(it.id)+'">Supprimer</button>':'')+'</div></div>').join('')
     :'<div class="empty">Aucun article pour le moment.</div>')+'</main>';
   $('#foot').innerHTML=admin?'':'<a id="login">Espace vendeur</a>';
@@ -105,6 +110,7 @@ function render(){
       try{await api('/api/items/'+b.dataset.del,{method:'DELETE'});refresh();}catch(e){alert(e.message);}});
   }
   $('#cartb').onclick=cartView;
+  document.querySelectorAll('[data-open]').forEach(e=>e.onclick=()=>openItem(S.items.find(x=>x.id===e.dataset.open)));
   document.querySelectorAll('[data-cart]').forEach(b=>b.onclick=()=>{const id=b.dataset.cart;cart=cart.includes(id)?cart.filter(x=>x!==id):[...cart,id];saveCart();render();});
 }
 
@@ -113,6 +119,14 @@ function loginForm(){
   const go=async()=>{try{await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:o.querySelector('#pw').value})});o.remove();refresh();}catch(e){alert(e.message);}};
   o.querySelector('#no').onclick=()=>o.remove();o.querySelector('#ok').onclick=go;
   o.querySelector('#pw').onkeydown=e=>{if(e.key==='Enter')go();};o.querySelector('#pw').focus();
+}
+
+function openItem(it){
+  if(!it)return;
+  const o=modal((it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+'<h3>'+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p><div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+(it.sold?'<button disabled>Vendu</button>':'<button class="pri" id="tg">'+(cart.includes(it.id)?'Retirer du panier':'Ajouter au panier')+'</button>')+'<button id="cl">Fermer</button></div>');
+  o.querySelector('#cl').onclick=()=>o.remove();
+  const tg=o.querySelector('#tg');
+  if(tg)tg.onclick=()=>{cart=cart.includes(it.id)?cart.filter(x=>x!==it.id):[...cart,it.id];saveCart();render();o.remove();};
 }
 
 function cartView(){
