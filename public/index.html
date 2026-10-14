@@ -47,6 +47,8 @@ header,main,footer{position:relative;z-index:1}
 #fall span{position:absolute;top:-40px;animation:fall linear infinite;will-change:transform}
 @keyframes fall{from{transform:translateY(-10vh) rotate(0)}to{transform:translateY(115vh) rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#fall{display:none}}
+.card.sold .gal,.card.sold .nopic{opacity:.4}
+button:disabled{opacity:.6;cursor:default}
 </style>
 </head>
 <body>
@@ -57,14 +59,19 @@ header,main,footer{position:relative;z-index:1}
 const $=s=>document.querySelector(s);
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const eur=n=>new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n);
-let S={settings:{},items:[]},admin=false;
+let S={settings:{},items:[],orders:[]},admin=false,cart=[];
+try{cart=JSON.parse(localStorage.getItem('cart')||'[]');}catch(e){}
+const saveCart=()=>{try{localStorage.setItem('cart',JSON.stringify(cart));}catch(e){}};
+const oi=x=>x.items||[{id:x.itemId,title:x.title,price:x.price}];
+const ot=x=>x.total!=null?x.total:oi(x).reduce((t,i)=>t+i.price,0);
 
 async function api(url,opt){
   const r=await fetch(url,opt);const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.error||'Erreur');return j;
 }
 async function refresh(){
-  S=await api('/api/shop');admin=(await api('/api/me')).admin;
+  S=await api('/api/shop');admin=(await api('/api/me')).admin;S.orders=admin?await api('/api/orders'):[];
+  cart=cart.filter(id=>S.items.some(i=>i.id===id&&!i.sold));saveCart();
   document.title=S.settings.shop;render();
 }
 function modal(html){
@@ -81,23 +88,24 @@ function resize(file){return new Promise(res=>{
 function render(){
   const st=S.settings;
   $('#root').innerHTML=
-   '<header><h1>'+esc(st.shop)+'</h1>'+(admin?'<div class="bar"><button class="pri" id="add">+ Article</button><button id="set">Réglages</button><button id="out">Déconnexion</button></div>':'')+'</header>'+
+   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Panier'+(cart.length?' ('+cart.length+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Article</button><button id="ord">Commandes'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="set">Réglages</button><button id="out">Déconnexion</button>':'')+'</div>'+'</header>'+
    '<main>'+(S.items.length?S.items.map(it=>
-    '<div class="card">'+(it.imgs.length?'<div class="gal">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Pas de photo</div>')+
+    '<div class="card'+(it.sold?' sold':'')+'">'+(it.imgs.length?'<div class="gal">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Pas de photo</div>')+
     '<div class="body"><h2>'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+eur(it.price)+'</div>'+
-    '<button class="pri" data-buy="'+esc(it.id)+'">Acheter</button>'+
+    (it.sold?'<button disabled>Vendu</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'Retirer du panier':'Ajouter au panier')+'</button>')+
     (admin?'<button class="dng" data-del="'+esc(it.id)+'">Supprimer</button>':'')+'</div></div>').join('')
     :'<div class="empty">Aucun article pour le moment.</div>')+'</main>';
   $('#foot').innerHTML=admin?'':'<a id="login">Espace vendeur</a>';
   if($('#login'))$('#login').onclick=loginForm;
   if(admin){
-    $('#add').onclick=addForm;$('#set').onclick=settings;
+    $('#add').onclick=addForm;$('#ord').onclick=ordersView;$('#set').onclick=settings;
     $('#out').onclick=async()=>{await api('/api/logout',{method:'POST'});refresh();};
     document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
       if(!confirm('Supprimer cet article ?'))return;
       try{await api('/api/items/'+b.dataset.del,{method:'DELETE'});refresh();}catch(e){alert(e.message);}});
   }
-  document.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buy(S.items.find(x=>x.id===b.dataset.buy)));
+  $('#cartb').onclick=cartView;
+  document.querySelectorAll('[data-cart]').forEach(b=>b.onclick=()=>{const id=b.dataset.cart;cart=cart.includes(id)?cart.filter(x=>x!==id):[...cart,id];saveCart();render();});
 }
 
 function loginForm(){
@@ -107,19 +115,64 @@ function loginForm(){
   o.querySelector('#pw').onkeydown=e=>{if(e.key==='Enter')go();};o.querySelector('#pw').focus();
 }
 
-function buy(it){
-  const st=S.settings,ref=it.title.slice(0,30);
-  const msg=encodeURIComponent('Bonjour, je viens de faire un virement de '+eur(it.price)+' pour : '+it.title+'. Mon nom : ');
+function cartView(){
+  const o=modal('');
+  const draw=()=>{
+    const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'';
+    const L=cart.map(id=>S.items.find(i=>i.id===id)).filter(Boolean),total=L.reduce((t,i)=>t+i.price,0);
+    o.querySelector('.dlg').innerHTML='<h3>Mon panier</h3>'+(L.length?
+      L.map(i=>'<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+'</small><button class="dng" style="margin-top:8px" data-rm="'+esc(i.id)+'">Retirer</button></div>').join('')+
+      '<div class="box"><small>Total à payer</small><b>'+eur(total)+'</b></div>'+
+      '<label>Ton nom</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Ton téléphone</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" value="'+esc(p0)+'">'+
+      '<div class="row"><button id="cl">Continuer mes achats</button><button class="pri" id="ok">Commander</button></div>'
+      :'<p class="note">Ton panier est vide.</p><div class="row"><button id="cl">Fermer</button></div>');
+    o.querySelector('#cl').onclick=()=>o.remove();
+    o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>x!==b.dataset.rm);saveCart();render();draw();});
+    const ok=o.querySelector('#ok');
+    if(ok)ok.onclick=async()=>{
+      const name=o.querySelector('#n').value.trim(),phone=o.querySelector('#ph').value.trim();
+      if(!name||phone.length<3){alert('Il faut ton nom et ton téléphone.');return;}
+      ok.disabled=true;ok.textContent='Envoi…';
+      try{
+        await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:cart,name,phone})});
+        cart=[];saveCart();o.remove();render();pay(L,total,name);
+      }catch(x){alert(x.message);await refresh();draw();}
+    };
+  };
+  draw();
+}
+
+function pay(L,total,name){
+  const st=S.settings,ref=(L.length===1?L[0].title:L.length+' articles - '+name).slice(0,35);
+  const msg=encodeURIComponent('Bonjour, je viens de faire un virement de '+eur(total)+' pour : '+L.map(i=>i.title).join(', ')+'. Mon nom : '+name);
   const wa=st.wa?'https://wa.me/'+st.wa.replace(/\D/g,'')+'?text='+msg:'';
-  const o=modal('<h3>Acheter : '+esc(it.title)+'</h3><p>Paie par virement bancaire avec les informations ci-dessous.</p>'+
-   (st.iban?'<div class="box"><small>Montant</small><b>'+eur(it.price)+'</b></div><div class="box"><small>IBAN</small><b>'+esc(st.iban)+'</b></div>'+
+  const o=modal('<h3>Merci '+esc(name)+' !</h3><p>Ta commande est enregistrée ('+L.map(i=>esc(i.title)).join(', ')+'). Paie maintenant par virement bancaire, en une seule fois :</p>'+
+   (st.iban?'<div class="box"><small>Montant total</small><b>'+eur(total)+'</b></div><div class="box"><small>IBAN</small><b>'+esc(st.iban)+'</b></div>'+
    (st.holder?'<div class="box"><small>Bénéficiaire</small><b>'+esc(st.holder)+'</b></div>':'')+
    '<div class="box"><small>Communication</small><b>'+esc(ref)+'</b></div>'+
-   '<p class="note">Fais le virement dans ton application bancaire, puis préviens le vendeur pour qu\'il prépare ta commande.</p>':
-   '<p class="note">Le vendeur n\'a pas encore indiqué ses coordonnées bancaires.</p>')+
+   '<p class="note">Le vendeur confirmera ta commande dès que le virement sera arrivé.</p>':
+   '<p class="note">Le vendeur n\'a pas encore indiqué ses coordonnées bancaires, il te contactera.</p>')+
    '<div class="row"><button id="cp">Copier l\'IBAN</button>'+(wa?'<a class="btn pri" target="_blank" rel="noopener" href="'+esc(wa)+'">Prévenir sur WhatsApp</a>':'')+'</div><div class="row"><button id="cl">Fermer</button></div>');
   o.querySelector('#cl').onclick=()=>o.remove();
   o.querySelector('#cp').onclick=async e=>{try{await navigator.clipboard.writeText(st.iban);e.target.textContent='Copié ✓';}catch(x){}};
+}
+
+function ordersView(){
+  const o=modal('');
+  const draw=()=>{
+    const L=S.orders;
+    o.querySelector('.dlg').innerHTML='<h3>Commandes</h3>'+(L.length?L.map(x=>
+     '<div class="box"><b>'+esc(oi(x).map(i=>i.title).join(', '))+' · '+eur(ot(x))+'</b><small>'+esc(x.name)+' · <a style="color:inherit" href="tel:'+esc(x.phone.replace(/[^\d+]/g,''))+'">'+esc(x.phone)+'</a></small><small>'+esc(new Date(x.date).toLocaleString('fr-BE'))+'</small>'+
+     '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Payé</label><button class="dng" data-rm="'+esc(x.id)+'">Supprimer</button></div></div>').join('')
+     :'<p class="note">Aucune commande pour le moment.</p>')+'<div class="row"><button id="cl">Fermer</button></div>';
+    o.querySelector('#cl').onclick=()=>o.remove();
+    o.querySelectorAll('[data-paid]').forEach(c=>c.onchange=async()=>{
+      try{await api('/api/orders/'+c.dataset.paid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({paid:c.checked})});await refresh();draw();}catch(e){alert(e.message);}});
+    o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{
+      if(!confirm('Supprimer cette commande ?'))return;
+      try{await api('/api/orders/'+b.dataset.rm,{method:'DELETE'});await refresh();draw();}catch(e){alert(e.message);}});
+  };
+  draw();
 }
 
 function addForm(){
