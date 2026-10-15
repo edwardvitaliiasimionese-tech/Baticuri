@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Magazinul meu</title>
 <style>
-:root{--bg:#fdf2f8;--card:#fff;--tx:#500724;--mut:#9d5c78;--ac:#fbcfe8;--acx:#831843;--bd:#fbcfe8}
+:root{--bg:#fff5f9;--card:#fce7f3;--tx:#500724;--mut:#9d5c78;--ac:#f9a8d4;--acx:#831843;--bd:#f9a8d4}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;background:linear-gradient(160deg,#f9a8d4,#f472b6 50%,#ec4899) fixed;color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:18px 16px;max-width:1000px;margin:auto}
@@ -60,16 +60,11 @@ h1{text-shadow:0 2px 10px rgba(255,255,255,.6)}
 footer a{color:#9d174d}
 .nd{font-size:.72rem;color:#be123c;font-weight:600;line-height:1.2}
 header,.shop,footer{position:relative;z-index:1}
-#fall{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
-#fall span{position:absolute;top:-40px;animation:fall linear infinite;will-change:transform}
-@keyframes fall{from{transform:translateY(-10vh) rotate(0)}to{transform:translateY(115vh) rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){#fall{display:none}}
 .card.sold .gal,.card.sold .nopic{opacity:.4}
 button:disabled{opacity:.6;cursor:default}
 </style>
 </head>
 <body>
-<div id="fall"></div>
 <div id="root"></div>
 <footer id="foot"></footer>
 <script>
@@ -202,6 +197,12 @@ function pay(L,total,name,phone){
   o.querySelector('#cl').onclick=()=>o.remove();
 }
 
+function waNote(x){
+  const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
+  const txt='Bună '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem târgul. Mulțumesc!';
+  return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
+}
+
 function waLink(x){
   const st=S.settings,num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
   const txt='Bună '+x.name+', mulțumim pentru comandă ('+oi(x).map(i=>i.title).join(', ')+').\nTotal de plată : '+eur(ot(x))+'\n\nTransfer către: '+(st.holder||'')+'\nIBAN : '+(st.iban||'(de completat)')+'\nDetalii plată: '+x.name+'\n\nSpune-mi când ai făcut-o, mulțumesc!';
@@ -215,6 +216,7 @@ function ordersView(){
     o.querySelector('.dlg').innerHTML='<h3>Comenzi</h3>'+(L.length?L.map(x=>
      '<div class="box"><b>'+esc(oi(x).map(i=>i.title).join(', '))+' · '+eur(ot(x))+'</b><small>'+esc(x.name)+' · <a style="color:inherit" href="tel:'+esc(x.phone.replace(/[^\d+]/g,''))+'">'+esc(x.phone)+'</a></small><small>'+esc(new Date(x.date).toLocaleString('ro-RO'))+'</small>'+
      '<div class="row"><a class="btn pri" target="_blank" rel="noopener" href="'+esc(waLink(x))+'">💬 Trimite IBAN-ul pe WhatsApp</a></div>'+
+     '<div class="row"><a class="btn" target="_blank" rel="noopener" href="'+esc(waNote(x))+'">💬 Mesaj: am luat comanda în considerare</a></div>'+
      '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Plătit</label><button class="dng" data-rm="'+esc(x.id)+'">Șterge</button></div></div>').join('')
      :'<p class="note">Nicio comandă deocamdată.</p>')+'<div class="row"><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
@@ -253,19 +255,6 @@ function settings(){
     try{await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({shop:o.querySelector('#s1').value,wa:o.querySelector('#s4').value,holder:o.querySelector('#s2').value,iban:o.querySelector('#s3').value})});o.remove();refresh();}
     catch(e){alert(e.message);}};
 }
-(function(){
-  const E=['💎','💖','💎','💗','💎','💕'],f=document.getElementById('fall');
-  for(let i=0;i<24;i++){
-    const e=document.createElement('span');
-    e.textContent=E[i%E.length];
-    e.style.left=(Math.random()*100)+'%';
-    e.style.fontSize=(16+Math.random()*20)+'px';
-    e.style.opacity=.45+Math.random()*.45;
-    e.style.animationDuration=(9+Math.random()*9)+'s';
-    e.style.animationDelay=(-Math.random()*18)+'s';
-    f.appendChild(e);
-  }
-})();
 refresh();
 </script>
 </body>
