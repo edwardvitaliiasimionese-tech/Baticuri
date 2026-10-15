@@ -55,7 +55,7 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa }, items: d.items }); }));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa }, items: d.items.map(it => ({ ...it, reserved: !it.sold && d.orders.some(o => !o.paid && oitems(o).some(i => i.id === it.id)) })) }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
@@ -101,6 +101,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
     const it = d.items.find(x => x.id === id);
     if (!it) return res.status(404).json({ error: 'Un articol din coș nu mai există' });
     if (it.sold) return res.status(409).json({ error: '„' + it.title + '” este deja vândut' });
+    if (d.orders.some(o => !o.paid && oitems(o).some(i => i.id === id))) return res.status(409).json({ error: '„' + it.title + '” nu este disponibil momentan' });
     items.push({ id: it.id, title: it.title, price: it.price });
   }
   if (d.orders.length >= 1000) return res.status(429).json({ error: 'Prea multe comenzi în așteptare' });
