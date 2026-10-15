@@ -199,7 +199,7 @@ function pay(L,total,name,phone){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Bună '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem târgul. Mulțumesc!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem târgul. Să o porți sănătosă! Mulțumesc!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
