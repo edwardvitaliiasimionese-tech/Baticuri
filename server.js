@@ -5,27 +5,27 @@ const PASS = process.env.ADMIN_PASSWORD;
 const URL_ = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const KEY = process.env.SUPABASE_KEY;
 const BUCKET = process.env.SUPABASE_BUCKET || 'boutique';
-if (!PASS || !URL_ || !KEY) { console.error('Variables manquantes : ADMIN_PASSWORD, SUPABASE_URL, SUPABASE_KEY'); process.exit(1); }
+if (!PASS || !URL_ || !KEY) { console.error('Variabile lipsă: ADMIN_PASSWORD, SUPABASE_URL, SUPABASE_KEY'); process.exit(1); }
 
 const TOKEN = crypto.createHmac('sha256', crypto.createHash('sha256').update('s:' + PASS).digest('hex')).update('admin').digest('hex');
 const OBJ = `${URL_}/storage/v1/object`;
 const H = (extra = {}) => ({ apikey: KEY, ...(KEY.startsWith('eyJ') ? { Authorization: 'Bearer ' + KEY } : {}), ...extra });
-const DEFAULT = () => ({ settings: { shop: 'Ma boutique', holder: '', iban: '', wa: '' }, items: [], orders: [] });
+const DEFAULT = () => ({ settings: { shop: 'Magazinul meu', holder: '', iban: '', wa: '' }, items: [], orders: [] });
 
 async function load() {
   const r = await fetch(`${OBJ}/${BUCKET}/db.json?t=${Date.now()}`, { headers: H() });
   if (r.ok) { const d = await r.json(); d.orders = d.orders || []; return d; }
   if (r.status === 400 || r.status === 404) return DEFAULT();   // fichier pas encore créé
-  throw new Error('Lecture impossible (' + r.status + ')');
+  throw new Error('Citire imposibilă (' + r.status + ')');
 }
 async function save(d) {
   const r = await fetch(`${OBJ}/${BUCKET}/db.json`, { method: 'POST', headers: H({ 'Content-Type': 'application/json', 'x-upsert': 'true' }), body: JSON.stringify(d) });
-  if (!r.ok) throw new Error('Sauvegarde impossible (' + r.status + ')');
+  if (!r.ok) throw new Error('Salvare imposibilă (' + r.status + ')');
 }
 async function putImage(f) {
   const name = crypto.randomBytes(12).toString('hex') + EXT[f.mimetype];
   const r = await fetch(`${OBJ}/${BUCKET}/${name}`, { method: 'POST', headers: H({ 'Content-Type': f.mimetype }), body: f.buffer });
-  if (!r.ok) throw new Error('Envoi photo impossible (' + r.status + ')');
+  if (!r.ok) throw new Error('Încărcarea pozei a eșuat (' + r.status + ')');
   return `${OBJ}/public/${BUCKET}/${name}`;
 }
 const delImage = u => fetch(`${OBJ}/${BUCKET}/${path.basename(u)}`, { method: 'DELETE', headers: H() }).catch(() => {});
@@ -34,13 +34,13 @@ function isAdmin(req) {
   const m = /(?:^|;\s*)admin=([a-f0-9]+)/.exec(req.headers.cookie || '');
   return !!m && m[1].length === TOKEN.length && crypto.timingSafeEqual(Buffer.from(m[1]), Buffer.from(TOKEN));
 }
-const needAdmin = (req, res, next) => isAdmin(req) ? next() : res.status(401).json({ error: 'Non autorisé' });
+const needAdmin = (req, res, next) => isAdmin(req) ? next() : res.status(401).json({ error: 'Neautorizat' });
 const wrap = fn => (req, res) => fn(req, res).catch(e => res.status(500).json({ error: e.message }));
 
 const limiter = (max, ms) => { const m = new Map(); return (req, res, next) => {
   const now = Date.now(), t = m.get(req.ip) || { n: 0, t: now };
   if (now - t.t > ms) { t.n = 0; t.t = now; }
-  if (t.n >= max) return res.status(429).json({ error: 'Trop d\'essais, réessaie plus tard.' });
+  if (t.n >= max) return res.status(429).json({ error: 'Prea multe încercări, mai încearcă mai târziu.' });
   t.n++; m.set(req.ip, t); next(); }; };
 const throttle = limiter(10, 15 * 60e3);
 const orderLimit = limiter(20, 60 * 60e3);
@@ -60,7 +60,7 @@ app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
   const a = Buffer.from(String(req.body.password || '')), b = Buffer.from(PASS);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Mot de passe incorrect' });
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Parolă incorectă' });
   res.cookie('admin', TOKEN, { httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 30 * 864e5, path: '/' });
   res.json({ admin: true });
 });
@@ -68,13 +68,13 @@ app.post('/api/logout', (req, res) => { res.clearCookie('admin', { path: '/' });
 
 app.put('/api/settings', needAdmin, wrap(async (req, res) => {
   const d = await load(), s = req.body || {}, c = (v, n) => String(v || '').trim().slice(0, n);
-  d.settings = { shop: c(s.shop, 60) || 'Ma boutique', holder: c(s.holder, 80), iban: c(s.iban, 40), wa: c(s.wa, 20) };
+  d.settings = { shop: c(s.shop, 60) || 'Magazinul meu', holder: c(s.holder, 80), iban: c(s.iban, 40), wa: c(s.wa, 20) };
   await save(d); res.json(d.settings);
 }));
 
 app.post('/api/items', needAdmin, upload.array('images', 6), wrap(async (req, res) => {
   const title = String(req.body.title || '').trim().slice(0, 100), price = parseFloat(req.body.price);
-  if (!title || !isFinite(price) || price < 0) return res.status(400).json({ error: 'Titre et prix requis' });
+  if (!title || !isFinite(price) || price < 0) return res.status(400).json({ error: 'Titlul și prețul sunt obligatorii' });
   const imgs = [];
   for (const f of req.files || []) imgs.push(await putImage(f));
   const d = await load();
@@ -84,7 +84,7 @@ app.post('/api/items', needAdmin, upload.array('images', 6), wrap(async (req, re
 
 app.delete('/api/items/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), it = d.items.find(x => x.id === req.params.id);
-  if (!it) return res.status(404).json({ error: 'Introuvable' });
+  if (!it) return res.status(404).json({ error: 'Negăsit' });
   d.items = d.items.filter(x => x !== it); await save(d);
   it.imgs.forEach(delImage);
   res.json({ ok: true });
@@ -94,16 +94,16 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   const d = await load(), c = (v, n) => String(v || '').trim().slice(0, n);
   const name = c(req.body.name, 80), phone = c(req.body.phone, 30);
   const ids = [...new Set(Array.isArray(req.body.itemIds) ? req.body.itemIds.map(String) : [])].slice(0, 30);
-  if (!ids.length) return res.status(400).json({ error: 'Panier vide' });
-  if (!name || phone.length < 3) return res.status(400).json({ error: 'Nom et téléphone requis' });
+  if (!ids.length) return res.status(400).json({ error: 'Coș gol' });
+  if (!name || phone.length < 3) return res.status(400).json({ error: 'Numele și telefonul sunt obligatorii' });
   const items = [];
   for (const id of ids) {
     const it = d.items.find(x => x.id === id);
-    if (!it) return res.status(404).json({ error: 'Un article du panier n\'existe plus' });
-    if (it.sold) return res.status(409).json({ error: '« ' + it.title + ' » est déjà vendu' });
+    if (!it) return res.status(404).json({ error: 'Un articol din coș nu mai există' });
+    if (it.sold) return res.status(409).json({ error: '„' + it.title + '” este deja vândut' });
     items.push({ id: it.id, title: it.title, price: it.price });
   }
-  if (d.orders.length >= 1000) return res.status(429).json({ error: 'Trop de commandes en attente' });
+  if (d.orders.length >= 1000) return res.status(429).json({ error: 'Prea multe comenzi în așteptare' });
   const total = Math.round(items.reduce((t, i) => t + i.price, 0) * 100) / 100;
   d.orders.unshift({ id: crypto.randomBytes(6).toString('hex'), items, total, name, phone, date: new Date().toISOString(), paid: false });
   await save(d); res.json({ ok: true, total });
@@ -113,7 +113,7 @@ app.get('/api/orders', needAdmin, wrap(async (req, res) => res.json((await load(
 
 app.put('/api/orders/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
-  if (!o) return res.status(404).json({ error: 'Introuvable' });
+  if (!o) return res.status(404).json({ error: 'Negăsit' });
   o.paid = !!req.body.paid; sync(d); await save(d); res.json(o);
 }));
 
@@ -122,5 +122,5 @@ app.delete('/api/orders/:id', needAdmin, wrap(async (req, res) => {
   d.orders = d.orders.filter(x => x.id !== req.params.id); sync(d); await save(d); res.json({ ok: true });
 }));
 
-app.use((err, req, res, next) => res.status(400).json({ error: err.message || 'Erreur' }));
-app.listen(PORT, () => console.log('Boutique sur le port ' + PORT));
+app.use((err, req, res, next) => res.status(400).json({ error: err.message || 'Eroare' }));
+app.listen(PORT, () => console.log('Magazin pornit pe portul ' + PORT));
