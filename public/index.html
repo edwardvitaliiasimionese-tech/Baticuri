@@ -5,19 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Magazinul meu</title>
 <style>
-:root{--bg:#f5f0ff;--card:#fff;--tx:#2e1065;--mut:#6b5b8a;--ac:#7c3aed;--acx:#fff;--bd:#e4d9f7}
+:root{--bg:#fdf2f8;--card:#fff;--tx:#500724;--mut:#9d5c78;--ac:#fbcfe8;--acx:#831843;--bd:#fbcfe8}
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;background:linear-gradient(160deg,#3b0f7a,#7e22ce 55%,#c084fc) fixed;color:#fff;font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{margin:0;min-height:100vh;background:linear-gradient(160deg,#f9a8d4,#f472b6 50%,#ec4899) fixed;color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:18px 16px;max-width:1000px;margin:auto}
 h1{font:700 1.6rem/1.2 Georgia,serif;margin:0}
 .bar{display:flex;gap:8px;flex-wrap:wrap}
-button,.btn{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:9px 14px;border-radius:10px;text-decoration:none;display:inline-block;text-align:center}
-.pri{background:var(--ac);color:var(--acx);border-color:var(--ac);font-weight:600}
+button,.btn{font:inherit;cursor:pointer;border:1px solid var(--bd);background:#fdf2f8;color:var(--tx);padding:9px 14px;border-radius:10px;text-decoration:none;display:inline-block;text-align:center}
+.pri{background:var(--ac);color:var(--acx);border-color:#f472b6;font-weight:700}
 .dng{color:#dc2626}
 .shop{max-width:1100px;margin:auto;padding:0 12px 30px;display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
 header{max-width:1100px}
 main{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px}
-aside{position:sticky;top:10px;max-height:calc(100vh - 20px);overflow:auto;background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:14px;padding:10px;font-size:.82rem}
+.side{position:sticky;top:10px;max-height:calc(100vh - 20px);overflow:auto;display:flex;flex-direction:column;gap:8px}
+aside{background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:14px;padding:10px;font-size:.82rem}
 aside h3{margin:0 0 6px;font-size:.95rem}
 .ln{display:flex;gap:6px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--bd)}
 .ln .t{flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -54,9 +55,10 @@ input,textarea{width:100%;font:inherit;padding:10px;border-radius:10px;border:1p
 .box small{color:var(--mut);display:block}.box b{word-break:break-all}
 .note{color:var(--mut);font-size:.85rem}
 .card,.dlg{color:var(--tx)}
-h1{text-shadow:0 2px 12px rgba(0,0,0,.25)}
-.empty{color:rgba(255,255,255,.85)}
-footer a{color:rgba(255,255,255,.75)}
+h1{text-shadow:0 2px 10px rgba(255,255,255,.6)}
+.empty{color:#831843}
+footer a{color:#9d174d}
+.nd{font-size:.72rem;color:#be123c;font-weight:600;line-height:1.2}
 header,.shop,footer{position:relative;z-index:1}
 #fall{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 #fall span{position:absolute;top:-40px;animation:fall linear infinite;will-change:transform}
@@ -87,12 +89,12 @@ async function api(url,opt){
 }
 async function refresh(){
   S=await api('/api/shop');admin=(await api('/api/me')).admin;S.orders=admin?await api('/api/orders'):[];
-  cart=cart.filter(id=>S.items.some(i=>i.id===id&&!i.sold));saveCart();
+  cart=cart.filter(id=>S.items.some(i=>i.id===id&&!i.sold&&!i.reserved));saveCart();
   document.title=S.settings.shop;render();
 }
-function modal(html){
+function modal(html,lock){
   const o=document.createElement('div');o.className='ov';o.innerHTML='<div class="dlg">'+html+'</div>';
-  o.addEventListener('click',e=>{if(e.target===o)o.remove();});document.body.appendChild(o);return o;
+  if(!lock)o.addEventListener('click',e=>{if(e.target===o)o.remove();});document.body.appendChild(o);return o;
 }
 function resize(file){return new Promise(res=>{
   const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{
@@ -106,9 +108,9 @@ function render(){
   $('#root').innerHTML=
    '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Coș'+(cart.length?' ('+cart.length+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>'+
    '<div class="shop"><main>'+(S.items.length?S.items.map(it=>
-    '<div class="card'+(it.sold?' sold':'')+'">'+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
+    '<div class="card'+(it.sold||it.reserved?' sold':'')+'">'+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
     '<div class="body"><h2 data-open="'+esc(it.id)+'">'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+eur(it.price)+'</div>'+
-    (it.sold?'<button disabled>Vândut</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'✓ Adăugat':'＋ Coș')+'</button>')+
+    (it.sold?'<button disabled>Vândut</button>':it.reserved?'<div class="nd">Articolul nu este disponibil momentan</div><button disabled>Indisponibil</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'✓ Adăugat':'＋ Coș')+'</button>')+
     (admin?'<button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
     :'<div class="empty">Niciun articol deocamdată.</div>')+'</main>'+sideHtml()+'</div>';
   $('#foot').innerHTML=admin?'':'<a id="login">Zonă vânzător</a>';
@@ -123,6 +125,7 @@ function render(){
   $('#cartb').onclick=cartView;
   document.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>x!==b.dataset.x);saveCart();render();});
   if($('#side-go'))$('#side-go').onclick=cartView;
+  if($('#side-ord'))$('#side-ord').onclick=ordersView;
   document.querySelectorAll('[data-open]').forEach(e=>e.onclick=()=>openItem(S.items.find(x=>x.id===e.dataset.open)));
   document.querySelectorAll('[data-cart]').forEach(b=>b.onclick=()=>{const id=b.dataset.cart;cart=cart.includes(id)?cart.filter(x=>x!==id):[...cart,id];saveCart();render();});
 }
@@ -134,17 +137,26 @@ function loginForm(){
   o.querySelector('#pw').onkeydown=e=>{if(e.key==='Enter')go();};o.querySelector('#pw').focus();
 }
 
+function ordersAside(){
+  if(!admin)return '';
+  const L=S.orders.slice(0,5),n=S.orders.filter(x=>!x.paid).length;
+  return '<aside><h3>📦 Comenzi'+(n?' ('+n+')':'')+'</h3>'+(L.length?
+    L.map(x=>'<div class="ln"><span class="t" style="-webkit-line-clamp:3"><b>'+esc(x.name)+'</b><br>'+esc(oi(x).map(i=>i.title).join(', '))+'</span><span class="p">'+eur(ot(x))+'<br>'+(x.paid?'✅':'⏳')+'</span></div>').join('')
+    :'<p class="note">Nicio comandă deocamdată.</p>')+
+    '<button class="pri" id="side-ord" style="margin-top:8px">Vezi toate comenzile</button></aside>';
+}
+
 function sideHtml(){
   const L=cart.map(id=>S.items.find(i=>i.id===id)).filter(Boolean),total=L.reduce((t,i)=>t+i.price,0);
-  return '<aside><h3>🛒 Coșul meu</h3>'+(L.length?
+  return '<div class="side"><aside><h3>🛒 Coșul meu</h3>'+(L.length?
     L.map(i=>'<div class="ln"><span class="t">'+esc(i.title)+'</span><span class="p">'+eur(i.price)+'</span><button data-x="'+esc(i.id)+'" aria-label="Elimină">✕</button></div>').join('')+
     '<div class="tot"><span>Total</span><b>'+eur(total)+'</b></div><button class="pri" id="side-go">Comandă</button>'
-    :'<p class="note">Gol deocamdată.</p>')+'</aside>';
+    :'<p class="note">Gol deocamdată.</p>')+'</aside>'+ordersAside()+'</div>';
 }
 
 function openItem(it){
   if(!it)return;
-  const o=modal((it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+'<h3>'+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p><div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+(it.sold?'<button disabled>Vândut</button>':'<button class="pri" id="tg">'+(cart.includes(it.id)?'Elimină din coș':'Adaugă în coș')+'</button>')+'<button id="cl">Închide</button></div>');
+  const o=modal((it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+'<h3>'+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p>'+(it.reserved&&!it.sold?'<p class="nd">Articolul nu este disponibil momentan</p>':'')+'<div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+(it.sold?'<button disabled>Vândut</button>':it.reserved?'<button disabled>Indisponibil</button>':'<button class="pri" id="tg">'+(cart.includes(it.id)?'Elimină din coș':'Adaugă în coș')+'</button>')+'<button id="cl">Închide</button></div>');
   o.querySelector('#cl').onclick=()=>o.remove();
   const tg=o.querySelector('#tg');
   if(tg)tg.onclick=()=>{cart=cart.includes(it.id)?cart.filter(x=>x!==it.id):[...cart,it.id];saveCart();render();o.remove();};
@@ -170,7 +182,7 @@ function cartView(){
       ok.disabled=true;ok.textContent='Se trimite…';
       try{
         await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:cart,name,phone})});
-        cart=[];saveCart();o.remove();render();pay(L,total,name,phone);
+        cart=[];saveCart();o.remove();refresh();pay(L,total,name,phone);
       }catch(x){alert(x.message);await refresh();draw();}
     };
   };
@@ -181,10 +193,12 @@ function pay(L,total,name,phone){
   const wn=(S.settings.wa||'').replace(/\D/g,'');
   const wa=wn?'https://wa.me/'+wn+'?text='+encodeURIComponent('Bună, am făcut o comandă ('+L.map(i=>i.title).join(', ')+', total '+eur(total)+'). Numele meu: '+name):'';
   const o=modal('<h3>Mulțumim, '+esc(name)+'!</h3><p>Comanda ta a fost înregistrată: '+L.map(i=>esc(i.title)).join(', ')+'.<br>Total: <b>'+eur(total)+'</b></p>'+
+   (wa?'<div class="box"><b>⚠️ Ultimul pas: anunță vânzătorul pe WhatsApp</b><small style="margin-top:6px">Este obligatoriu pentru ca vânzătorul să-ți confirme comanda. Apasă butonul de mai jos și trimite mesajul.</small></div>':'')+
    '<div class="box"><b>💵 Plata, de preferat în numerar (cash)</b><small style="margin-top:6px">Vânzătorul te va contacta pentru a vă înțelege.</small></div>'+
    '<div class="box"><b>📲 Altfel, vei primi numărul de cont (IBAN) în privat pe WhatsApp</b><small style="margin-top:6px">Vânzătorul îți scrie pe numărul indicat de tine ('+esc(phone)+').</small></div>'+
    '<p class="note">Dacă plătești prin transfer bancar, fă-o doar după ce ai primit mesajul lui. Comanda ta este confirmată imediat ce plata a fost primită.</p>'+
-   '<div class="row">'+(wa?'<a class="btn" target="_blank" rel="noopener" href="'+esc(wa)+'">Scrie vânzătorului pe WhatsApp</a>':'')+'<button class="pri" id="cl">Închide</button></div>');
+   '<div class="row">'+(wa?'<a class="btn pri" id="wa" target="_blank" rel="noopener" href="'+esc(wa)+'">Anunță vânzătorul pe WhatsApp</a>':'')+'<button id="cl"'+(wa?' disabled':'')+'>Închide</button></div>',!!wa);
+  if(wa)o.querySelector('#wa').onclick=()=>{o.querySelector('#cl').disabled=false;};
   o.querySelector('#cl').onclick=()=>o.remove();
 }
 
@@ -240,7 +254,7 @@ function settings(){
     catch(e){alert(e.message);}};
 }
 (function(){
-  const E=['💎','💍','📿','👑','✨','💜'],f=document.getElementById('fall');
+  const E=['💎','💖','💎','💗','💎','💕'],f=document.getElementById('fall');
   for(let i=0;i<24;i++){
     const e=document.createElement('span');
     e.textContent=E[i%E.length];
