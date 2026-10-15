@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="fr">
+<html lang="ro">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ma boutique</title>
+<title>Magazinul meu</title>
 <style>
 :root{--bg:#f5f0ff;--card:#fff;--tx:#2e1065;--mut:#6b5b8a;--ac:#7c3aed;--acx:#fff;--bd:#e4d9f7}
 *{box-sizing:border-box}
@@ -73,7 +73,8 @@ button:disabled{opacity:.6;cursor:default}
 <script>
 const $=s=>document.querySelector(s);
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const eur=n=>new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n);
+const CUR='EUR'; // schimbă în 'RON' pentru lei
+const eur=n=>new Intl.NumberFormat('ro-RO',{style:'currency',currency:CUR}).format(n);
 let S={settings:{},items:[],orders:[]},admin=false,cart=[];
 try{cart=JSON.parse(localStorage.getItem('cart')||'[]');}catch(e){}
 const saveCart=()=>{try{localStorage.setItem('cart',JSON.stringify(cart));}catch(e){}};
@@ -82,7 +83,7 @@ const ot=x=>x.total!=null?x.total:oi(x).reduce((t,i)=>t+i.price,0);
 
 async function api(url,opt){
   const r=await fetch(url,opt);const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(j.error||'Erreur');return j;
+  if(!r.ok)throw new Error(j.error||'Eroare');return j;
 }
 async function refresh(){
   S=await api('/api/shop');admin=(await api('/api/me')).admin;S.orders=admin?await api('/api/orders'):[];
@@ -103,20 +104,20 @@ function resize(file){return new Promise(res=>{
 function render(){
   const st=S.settings;
   $('#root').innerHTML=
-   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Panier'+(cart.length?' ('+cart.length+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Article</button><button id="ord">Commandes'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="set">Réglages</button><button id="out">Déconnexion</button>':'')+'</div>'+'</header>'+
+   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Coș'+(cart.length?' ('+cart.length+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>'+
    '<div class="shop"><main>'+(S.items.length?S.items.map(it=>
-    '<div class="card'+(it.sold?' sold':'')+'">'+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Pas de photo</div>')+
+    '<div class="card'+(it.sold?' sold':'')+'">'+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
     '<div class="body"><h2 data-open="'+esc(it.id)+'">'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+eur(it.price)+'</div>'+
-    (it.sold?'<button disabled>Vendu</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'✓ Ajouté':'＋ Panier')+'</button>')+
-    (admin?'<button class="dng" data-del="'+esc(it.id)+'">Supprimer</button>':'')+'</div></div>').join('')
-    :'<div class="empty">Aucun article pour le moment.</div>')+'</main>'+sideHtml()+'</div>';
-  $('#foot').innerHTML=admin?'':'<a id="login">Espace vendeur</a>';
+    (it.sold?'<button disabled>Vândut</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'✓ Adăugat':'＋ Coș')+'</button>')+
+    (admin?'<button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
+    :'<div class="empty">Niciun articol deocamdată.</div>')+'</main>'+sideHtml()+'</div>';
+  $('#foot').innerHTML=admin?'':'<a id="login">Zonă vânzător</a>';
   if($('#login'))$('#login').onclick=loginForm;
   if(admin){
     $('#add').onclick=addForm;$('#ord').onclick=ordersView;$('#set').onclick=settings;
     $('#out').onclick=async()=>{await api('/api/logout',{method:'POST'});refresh();};
     document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
-      if(!confirm('Supprimer cet article ?'))return;
+      if(!confirm('Ștergi acest articol?'))return;
       try{await api('/api/items/'+b.dataset.del,{method:'DELETE'});refresh();}catch(e){alert(e.message);}});
   }
   $('#cartb').onclick=cartView;
@@ -127,7 +128,7 @@ function render(){
 }
 
 function loginForm(){
-  const o=modal('<h3>Espace vendeur</h3><label>Mot de passe</label><input id="pw" type="password" autocomplete="current-password"><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Entrer</button></div>');
+  const o=modal('<h3>Zonă vânzător</h3><label>Parolă</label><input id="pw" type="password" autocomplete="current-password"><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Intră</button></div>');
   const go=async()=>{try{await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:o.querySelector('#pw').value})});o.remove();refresh();}catch(e){alert(e.message);}};
   o.querySelector('#no').onclick=()=>o.remove();o.querySelector('#ok').onclick=go;
   o.querySelector('#pw').onkeydown=e=>{if(e.key==='Enter')go();};o.querySelector('#pw').focus();
@@ -135,15 +136,15 @@ function loginForm(){
 
 function sideHtml(){
   const L=cart.map(id=>S.items.find(i=>i.id===id)).filter(Boolean),total=L.reduce((t,i)=>t+i.price,0);
-  return '<aside><h3>🛒 Mon panier</h3>'+(L.length?
-    L.map(i=>'<div class="ln"><span class="t">'+esc(i.title)+'</span><span class="p">'+eur(i.price)+'</span><button data-x="'+esc(i.id)+'" aria-label="Retirer">✕</button></div>').join('')+
-    '<div class="tot"><span>Total</span><b>'+eur(total)+'</b></div><button class="pri" id="side-go">Commander</button>'
-    :'<p class="note">Vide pour le moment.</p>')+'</aside>';
+  return '<aside><h3>🛒 Coșul meu</h3>'+(L.length?
+    L.map(i=>'<div class="ln"><span class="t">'+esc(i.title)+'</span><span class="p">'+eur(i.price)+'</span><button data-x="'+esc(i.id)+'" aria-label="Elimină">✕</button></div>').join('')+
+    '<div class="tot"><span>Total</span><b>'+eur(total)+'</b></div><button class="pri" id="side-go">Comandă</button>'
+    :'<p class="note">Gol deocamdată.</p>')+'</aside>';
 }
 
 function openItem(it){
   if(!it)return;
-  const o=modal((it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+'<h3>'+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p><div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+(it.sold?'<button disabled>Vendu</button>':'<button class="pri" id="tg">'+(cart.includes(it.id)?'Retirer du panier':'Ajouter au panier')+'</button>')+'<button id="cl">Fermer</button></div>');
+  const o=modal((it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+'<h3>'+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p><div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+(it.sold?'<button disabled>Vândut</button>':'<button class="pri" id="tg">'+(cart.includes(it.id)?'Elimină din coș':'Adaugă în coș')+'</button>')+'<button id="cl">Închide</button></div>');
   o.querySelector('#cl').onclick=()=>o.remove();
   const tg=o.querySelector('#tg');
   if(tg)tg.onclick=()=>{cart=cart.includes(it.id)?cart.filter(x=>x!==it.id):[...cart,it.id];saveCart();render();o.remove();};
@@ -154,19 +155,19 @@ function cartView(){
   const draw=()=>{
     const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'';
     const L=cart.map(id=>S.items.find(i=>i.id===id)).filter(Boolean),total=L.reduce((t,i)=>t+i.price,0);
-    o.querySelector('.dlg').innerHTML='<h3>Mon panier</h3>'+(L.length?
-      L.map(i=>'<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+'</small><button class="dng" style="margin-top:8px" data-rm="'+esc(i.id)+'">Retirer</button></div>').join('')+
-      '<div class="box"><small>Total à payer</small><b>'+eur(total)+'</b></div>'+
-      '<label>Ton nom</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Ton numéro WhatsApp (avec l\'indicatif)</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" placeholder="+32 470 12 34 56" value="'+esc(p0)+'">'+
-      '<div class="row"><button id="cl">Continuer mes achats</button><button class="pri" id="ok">Commander</button></div>'
-      :'<p class="note">Ton panier est vide.</p><div class="row"><button id="cl">Fermer</button></div>');
+    o.querySelector('.dlg').innerHTML='<h3>Coșul meu</h3>'+(L.length?
+      L.map(i=>'<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+'</small><button class="dng" style="margin-top:8px" data-rm="'+esc(i.id)+'">Elimină</button></div>').join('')+
+      '<div class="box"><small>Total de plată</small><b>'+eur(total)+'</b></div>'+
+      '<label>Numele tău</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" placeholder="+40 712 345 678" value="'+esc(p0)+'">'+
+      '<div class="row"><button id="cl">Continuă cumpărăturile</button><button class="pri" id="ok">Comandă</button></div>'
+      :'<p class="note">Coșul tău este gol.</p><div class="row"><button id="cl">Închide</button></div>');
     o.querySelector('#cl').onclick=()=>o.remove();
     o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>x!==b.dataset.rm);saveCart();render();draw();});
     const ok=o.querySelector('#ok');
     if(ok)ok.onclick=async()=>{
       const name=o.querySelector('#n').value.trim(),phone=o.querySelector('#ph').value.trim();
-      if(!name||!/^(\+|00)\d[\d\s.-]{7,}$/.test(phone)){alert('Il faut ton nom et ton numéro WhatsApp avec l\'indicatif, par exemple +32 470 12 34 56.');return;}
-      ok.disabled=true;ok.textContent='Envoi…';
+      if(!name||!/^(\+|00)\d[\d\s.-]{7,}$/.test(phone)){alert('Trebuie numele tău și numărul de WhatsApp cu prefixul țării, de exemplu +40 712 345 678.');return;}
+      ok.disabled=true;ok.textContent='Se trimite…';
       try{
         await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:cart,name,phone})});
         cart=[];saveCart();o.remove();render();pay(L,total,name,phone);
@@ -178,18 +179,18 @@ function cartView(){
 
 function pay(L,total,name,phone){
   const wn=(S.settings.wa||'').replace(/\D/g,'');
-  const wa=wn?'https://wa.me/'+wn+'?text='+encodeURIComponent('Bonjour, j\'ai passé commande ('+L.map(i=>i.title).join(', ')+', total '+eur(total)+'). Mon nom : '+name):'';
-  const o=modal('<h3>Merci '+esc(name)+' !</h3><p>Ta commande est bien enregistrée : '+L.map(i=>esc(i.title)).join(', ')+'.<br>Total : <b>'+eur(total)+'</b></p>'+
-   '<div class="box"><b>💵 Paiement de préférence en cash</b><small style="margin-top:6px">Le vendeur te contacte pour s\'arranger avec toi.</small></div>'+
-   '<div class="box"><b>📲 Sinon, tu vas recevoir le numéro de compte (IBAN) en privé sur WhatsApp</b><small style="margin-top:6px">Le vendeur t\'écrit sur le numéro que tu as indiqué ('+esc(phone)+').</small></div>'+
-   '<p class="note">Si tu paies par virement, fais-le seulement après avoir reçu son message. Ta commande est confirmée dès que le paiement est reçu.</p>'+
-   '<div class="row">'+(wa?'<a class="btn" target="_blank" rel="noopener" href="'+esc(wa)+'">Écrire au vendeur sur WhatsApp</a>':'')+'<button class="pri" id="cl">Fermer</button></div>');
+  const wa=wn?'https://wa.me/'+wn+'?text='+encodeURIComponent('Bună, am făcut o comandă ('+L.map(i=>i.title).join(', ')+', total '+eur(total)+'). Numele meu: '+name):'';
+  const o=modal('<h3>Mulțumim, '+esc(name)+'!</h3><p>Comanda ta a fost înregistrată: '+L.map(i=>esc(i.title)).join(', ')+'.<br>Total: <b>'+eur(total)+'</b></p>'+
+   '<div class="box"><b>💵 Plata, de preferat în numerar (cash)</b><small style="margin-top:6px">Vânzătorul te va contacta pentru a vă înțelege.</small></div>'+
+   '<div class="box"><b>📲 Altfel, vei primi numărul de cont (IBAN) în privat pe WhatsApp</b><small style="margin-top:6px">Vânzătorul îți scrie pe numărul indicat de tine ('+esc(phone)+').</small></div>'+
+   '<p class="note">Dacă plătești prin transfer bancar, fă-o doar după ce ai primit mesajul lui. Comanda ta este confirmată imediat ce plata a fost primită.</p>'+
+   '<div class="row">'+(wa?'<a class="btn" target="_blank" rel="noopener" href="'+esc(wa)+'">Scrie vânzătorului pe WhatsApp</a>':'')+'<button class="pri" id="cl">Închide</button></div>');
   o.querySelector('#cl').onclick=()=>o.remove();
 }
 
 function waLink(x){
   const st=S.settings,num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Bonjour '+x.name+', merci pour ta commande ('+oi(x).map(i=>i.title).join(', ')+').\nTotal à payer : '+eur(ot(x))+'\n\nVirement à : '+(st.holder||'')+'\nIBAN : '+(st.iban||'(à compléter)')+'\nCommunication : '+x.name+'\n\nDis-moi quand c\'est fait, merci !';
+  const txt='Bună '+x.name+', mulțumim pentru comandă ('+oi(x).map(i=>i.title).join(', ')+').\nTotal de plată : '+eur(ot(x))+'\n\nTransfer către: '+(st.holder||'')+'\nIBAN : '+(st.iban||'(de completat)')+'\nDetalii plată: '+x.name+'\n\nSpune-mi când ai făcut-o, mulțumesc!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -197,16 +198,16 @@ function ordersView(){
   const o=modal('');
   const draw=()=>{
     const L=S.orders;
-    o.querySelector('.dlg').innerHTML='<h3>Commandes</h3>'+(L.length?L.map(x=>
-     '<div class="box"><b>'+esc(oi(x).map(i=>i.title).join(', '))+' · '+eur(ot(x))+'</b><small>'+esc(x.name)+' · <a style="color:inherit" href="tel:'+esc(x.phone.replace(/[^\d+]/g,''))+'">'+esc(x.phone)+'</a></small><small>'+esc(new Date(x.date).toLocaleString('fr-BE'))+'</small>'+
-     '<div class="row"><a class="btn pri" target="_blank" rel="noopener" href="'+esc(waLink(x))+'">💬 Envoyer l\'IBAN sur WhatsApp</a></div>'+
-     '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Payé</label><button class="dng" data-rm="'+esc(x.id)+'">Supprimer</button></div></div>').join('')
-     :'<p class="note">Aucune commande pour le moment.</p>')+'<div class="row"><button id="cl">Fermer</button></div>';
+    o.querySelector('.dlg').innerHTML='<h3>Comenzi</h3>'+(L.length?L.map(x=>
+     '<div class="box"><b>'+esc(oi(x).map(i=>i.title).join(', '))+' · '+eur(ot(x))+'</b><small>'+esc(x.name)+' · <a style="color:inherit" href="tel:'+esc(x.phone.replace(/[^\d+]/g,''))+'">'+esc(x.phone)+'</a></small><small>'+esc(new Date(x.date).toLocaleString('ro-RO'))+'</small>'+
+     '<div class="row"><a class="btn pri" target="_blank" rel="noopener" href="'+esc(waLink(x))+'">💬 Trimite IBAN-ul pe WhatsApp</a></div>'+
+     '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Plătit</label><button class="dng" data-rm="'+esc(x.id)+'">Șterge</button></div></div>').join('')
+     :'<p class="note">Nicio comandă deocamdată.</p>')+'<div class="row"><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
     o.querySelectorAll('[data-paid]').forEach(c=>c.onchange=async()=>{
       try{await api('/api/orders/'+c.dataset.paid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({paid:c.checked})});await refresh();draw();}catch(e){alert(e.message);}});
     o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{
-      if(!confirm('Supprimer cette commande ?'))return;
+      if(!confirm('Ștergi această comandă?'))return;
       try{await api('/api/orders/'+b.dataset.rm,{method:'DELETE'});await refresh();draw();}catch(e){alert(e.message);}});
   };
   draw();
@@ -214,25 +215,25 @@ function ordersView(){
 
 function addForm(){
   let blobs=[];
-  const o=modal('<h3>Nouvel article</h3><label>Titre</label><input id="t"><label>Description</label><textarea id="d" rows="3"></textarea><label>Prix (€)</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal"><label>Photos (6 maximum)</label><input id="f" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Publier</button></div>');
+  const o=modal('<h3>Articol nou</h3><label>Titlu</label><input id="t"><label>Descriere</label><textarea id="d" rows="3"></textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal"><label>Poze (maxim 6)</label><input id="f" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Publică</button></div>');
   o.querySelector('#no').onclick=()=>o.remove();
   o.querySelector('#f').onchange=async e=>{
     blobs=(await Promise.all([...e.target.files].slice(0,6).map(resize))).filter(Boolean);
     o.querySelector('#th').innerHTML=blobs.map(b=>'<img src="'+URL.createObjectURL(b)+'">').join('');};
   o.querySelector('#ok').onclick=async e=>{
     const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
-    if(!t||p===''){alert('Il faut un titre et un prix.');return;}
+    if(!t||p===''){alert('Trebuie un titlu și un preț.');return;}
     const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p);
     blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
-    e.target.disabled=true;e.target.textContent='Envoi…';
+    e.target.disabled=true;e.target.textContent='Se trimite…';
     try{await api('/api/items',{method:'POST',body:fd});o.remove();refresh();}
-    catch(x){alert(x.message);e.target.disabled=false;e.target.textContent='Publier';}
+    catch(x){alert(x.message);e.target.disabled=false;e.target.textContent='Publică';}
   };
 }
 
 function settings(){
   const st=S.settings;
-  const o=modal('<h3>Réglages</h3><label>Nom de la boutique</label><input id="s1" value="'+esc(st.shop)+'"><label>Ton numéro WhatsApp (avec indicatif, ex. 32470123456)</label><input id="s4" value="'+esc(st.wa)+'" inputmode="tel"><label>Titulaire du compte (visible par toi seul)</label><input id="s2" value="'+esc(st.holder)+'"><label>IBAN (visible par toi seul)</label><input id="s3" value="'+esc(st.iban)+'" placeholder="BE00 0000 0000 0000"><div class="row"><button id="no">Annuler</button><button class="pri" id="ok">Enregistrer</button></div>');
+  const o=modal('<h3>Setări</h3><label>Numele magazinului</label><input id="s1" value="'+esc(st.shop)+'"><label>Numărul tău de WhatsApp (cu prefix, ex. 40712345678)</label><input id="s4" value="'+esc(st.wa)+'" inputmode="tel"><label>Titularul contului (vizibil doar pentru tine)</label><input id="s2" value="'+esc(st.holder)+'"><label>IBAN (vizibil doar pentru tine)</label><input id="s3" value="'+esc(st.iban)+'" placeholder="RO00 AAAA 0000 0000 0000 0000"><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
   o.querySelector('#no').onclick=()=>o.remove();
   o.querySelector('#ok').onclick=async()=>{
     try{await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({shop:o.querySelector('#s1').value,wa:o.querySelector('#s4').value,holder:o.querySelector('#s2').value,iban:o.querySelector('#s3').value})});o.remove();refresh();}
