@@ -197,9 +197,25 @@ function pay(L,total,name,phone){
   o.querySelector('#cl').onclick=()=>o.remove();
 }
 
+function printOrder(x){
+  if(!x)return;
+  const w=window.open('','_blank');
+  if(!w){alert('Permite ferestrele pop-up ca să poți printa.');return;}
+  const rows=oi(x).map(i=>'<tr><td>'+esc(i.title)+'</td><td style="text-align:right">'+eur(i.price)+'</td></tr>').join('');
+  w.document.write('<!doctype html><html lang="ro"><head><meta charset="utf-8"><title>Comanda '+esc(x.id)+'</title><style>body{font:15px/1.5 Arial,sans-serif;color:#111;padding:30px;max-width:700px;margin:auto}h1{margin:0 0 4px}h2{margin:24px 0 6px;font-size:1.05em}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{padding:8px;border-bottom:1px solid #ccc;text-align:left}th:last-child{text-align:right}.tot{text-align:right;font-size:1.25em;font-weight:bold;margin-top:10px}.m{color:#555}</style></head><body>'+
+    '<h1>'+esc(S.settings.shop)+'</h1><div class="m">Detalii comandă</div>'+
+    '<h2>Comanda nr. '+esc(x.id)+'</h2><div>Data: '+esc(new Date(x.date).toLocaleString('ro-RO'))+'</div>'+
+    '<div>Stare: <b>'+(x.paid?'Plătită':'Neplătită')+'</b></div>'+
+    '<h2>Client</h2><div>Nume: '+esc(x.name)+'</div><div>Telefon: '+esc(x.phone)+'</div>'+
+    '<h2>Articole</h2><table><tr><th>Articol</th><th>Preț</th></tr>'+rows+'</table>'+
+    '<div class="tot">Total: '+eur(ot(x))+'</div></body></html>');
+  w.document.close();
+  setTimeout(()=>{w.focus();w.print();},400);
+}
+
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Să o porți sănătosă! Mulțumesc că ai cumpărat de la noi!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc mult că ai cumpărat de la noi!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -217,9 +233,10 @@ function ordersView(){
      '<div class="box"><b>'+esc(oi(x).map(i=>i.title).join(', '))+' · '+eur(ot(x))+'</b><small>'+esc(x.name)+' · <a style="color:inherit" href="tel:'+esc(x.phone.replace(/[^\d+]/g,''))+'">'+esc(x.phone)+'</a></small><small>'+esc(new Date(x.date).toLocaleString('ro-RO'))+'</small>'+
      '<div class="row"><a class="btn pri" target="_blank" rel="noopener" href="'+esc(waLink(x))+'">💬 Trimite IBAN-ul pe WhatsApp</a></div>'+
      '<div class="row"><a class="btn" target="_blank" rel="noopener" href="'+esc(waNote(x))+'">💬 Mesaj: am luat comanda în considerare</a></div>'+
-     '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Plătit</label><button class="dng" data-rm="'+esc(x.id)+'">Șterge</button></div></div>').join('')
+     '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Plătit</label><button data-pr="'+esc(x.id)+'">🖨️ PDF</button><button class="dng" data-rm="'+esc(x.id)+'">Șterge</button></div></div>').join('')
      :'<p class="note">Nicio comandă deocamdată.</p>')+'<div class="row"><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
+    o.querySelectorAll('[data-pr]').forEach(b=>b.onclick=()=>printOrder(S.orders.find(x=>x.id===b.dataset.pr)));
     o.querySelectorAll('[data-paid]').forEach(c=>c.onchange=async()=>{
       try{await api('/api/orders/'+c.dataset.paid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({paid:c.checked})});await refresh();draw();}catch(e){alert(e.message);}});
     o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{
