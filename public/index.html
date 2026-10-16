@@ -202,7 +202,7 @@ function printOrder(x){
   const w=window.open('','_blank');
   if(!w){alert('Permite ferestrele pop-up ca să poți printa.');return;}
   const rows=oi(x).map(i=>'<tr><td>'+esc(i.title)+'</td><td style="text-align:right">'+eur(i.price)+'</td></tr>').join('');
-  w.document.write('<!doctype html><html lang="ro"><head><meta charset="utf-8"><title>Comanda '+esc(x.id)+'</title><style>body{font:15px/1.5 Arial,sans-serif;color:#111;padding:30px;max-width:700px;margin:auto}h1{margin:0 0 4px}h2{margin:24px 0 6px;font-size:1.05em}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{padding:8px;border-bottom:1px solid #ccc;text-align:left}th:last-child{text-align:right}.tot{text-align:right;font-size:1.25em;font-weight:bold;margin-top:10px}.m{color:#555}</style></head><body>'+
+  w.document.write('<!doctype html><html lang="ro"><head><meta charset="utf-8"><title>Comanda '+esc(x.id)+'</title><style>@page{size:A4;margin:12mm}body{font:12px/1.4 Arial,sans-serif;color:#111;margin:0;max-width:180mm}h1{margin:0 0 2px;font-size:18px}h2{margin:12px 0 4px;font-size:13px}table{width:100%;border-collapse:collapse;margin:6px 0}th,td{padding:4px 6px;border-bottom:1px solid #ccc;text-align:left}th:last-child{text-align:right}.tot{text-align:right;font-size:14px;font-weight:bold;margin-top:6px}.m{color:#555}</style></head><body>'+
     '<h1>'+esc(S.settings.shop)+'</h1><div class="m">Detalii comandă</div>'+
     '<h2>Comanda nr. '+esc(x.id)+'</h2><div>Data: '+esc(new Date(x.date).toLocaleString('ro-RO'))+'</div>'+
     '<div>Stare: <b>'+(x.paid?'Plătită':'Neplătită')+'</b></div>'+
@@ -215,7 +215,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc mult că ai cumpărat de la noi!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumescmult că ai cumpărat de la noi!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
