@@ -106,12 +106,13 @@ function render(){
     '<div class="card'+(it.sold||it.reserved?' sold':'')+'">'+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
     '<div class="body"><h2 data-open="'+esc(it.id)+'">'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+eur(it.price)+'</div>'+
     (it.sold?'<button disabled>Vândut</button>':it.reserved?'<div class="nd">Articolul nu este disponibil momentan</div><button disabled>Indisponibil</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'✓ Adăugat':'＋ Coș')+'</button>')+
-    (admin?'<button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
+    (admin?'<button data-edit="'+esc(it.id)+'">Editează</button><button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
     :'<div class="empty">Niciun articol deocamdată.</div>')+'</main>'+sideHtml()+'</div>';
   $('#foot').innerHTML=admin?'':'<a id="login">Zonă vânzător</a>';
   if($('#login'))$('#login').onclick=loginForm;
   if(admin){
-    $('#add').onclick=addForm;$('#ord').onclick=ordersView;$('#set').onclick=settings;
+    $('#add').onclick=addForm;$('#ord').onclick=ordersView;
+    document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editForm(S.items.find(x=>x.id===b.dataset.edit)));$('#set').onclick=settings;
     $('#out').onclick=async()=>{await api('/api/logout',{method:'POST'});refresh();};
     document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
       if(!confirm('Ștergi acest articol?'))return;
@@ -215,7 +216,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumescmult că ai cumpărat de la noi!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc mult că ai cumpărat de la noi!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -244,6 +245,31 @@ function ordersView(){
       try{await api('/api/orders/'+b.dataset.rm,{method:'DELETE'});await refresh();draw();}catch(e){alert(e.message);}});
   };
   draw();
+}
+
+function editForm(it){
+  if(!it)return;
+  let keep=[...it.imgs],blobs=[];
+  const o=modal('<h3>Editează articolul</h3><label>Titlu</label><input id="t" value="'+esc(it.title)+'"><label>Descriere</label><textarea id="d" rows="3">'+esc(it.desc)+'</textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(it.price)+'"><label>Pozele actuale (apasă ✕ ca să ștergi o poză)</label><div class="thumbs" id="old"></div><label>Adaugă poze noi (maxim 6 în total)</label><input id="f" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
+  const drawOld=()=>{
+    o.querySelector('#old').innerHTML=keep.map((s,i)=>'<div style="position:relative"><img src="'+esc(s)+'"><button data-k="'+i+'" style="position:absolute;top:-6px;right:-6px;padding:0 6px;border-radius:50%">✕</button></div>').join('')||'<span class="note">Nicio poză</span>';
+    o.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{keep.splice(+b.dataset.k,1);drawOld();});
+  };
+  drawOld();
+  o.querySelector('#no').onclick=()=>o.remove();
+  o.querySelector('#f').onchange=async e=>{
+    blobs=(await Promise.all([...e.target.files].slice(0,6).map(resize))).filter(Boolean);
+    o.querySelector('#th').innerHTML=blobs.map(b=>'<img src="'+URL.createObjectURL(b)+'">').join('');};
+  o.querySelector('#ok').onclick=async e=>{
+    const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
+    if(!t||p===''){alert('Trebuie un titlu și un preț.');return;}
+    if(keep.length+blobs.length>6){alert('Maxim 6 poze.');return;}
+    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p);fd.append('keep',JSON.stringify(keep));
+    blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
+    e.target.disabled=true;e.target.textContent='Se trimite…';
+    try{await api('/api/items/'+it.id,{method:'PUT',body:fd});o.remove();refresh();}
+    catch(x){alert(x.message);e.target.disabled=false;e.target.textContent='Salvează';}
+  };
 }
 
 function addForm(){
