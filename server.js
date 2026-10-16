@@ -82,6 +82,22 @@ app.post('/api/items', needAdmin, upload.array('images', 6), wrap(async (req, re
   d.items.unshift(item); await save(d); res.json(item);
 }));
 
+app.put('/api/items/:id', needAdmin, upload.array('images', 6), wrap(async (req, res) => {
+  const d = await load(), it = d.items.find(x => x.id === req.params.id);
+  if (!it) return res.status(404).json({ error: 'Negăsit' });
+  const title = String(req.body.title || '').trim().slice(0, 100), price = parseFloat(req.body.price);
+  if (!title || !isFinite(price) || price < 0) return res.status(400).json({ error: 'Titlul și prețul sunt obligatorii' });
+  let keep = [];
+  try { keep = JSON.parse(req.body.keep || '[]'); } catch (e) {}
+  keep = keep.filter(u => it.imgs.includes(u));
+  const added = [];
+  for (const f of req.files || []) added.push(await putImage(f));
+  const removed = it.imgs.filter(u => !keep.includes(u));
+  it.title = title; it.desc = String(req.body.desc || '').trim().slice(0, 2000); it.price = price;
+  it.imgs = [...keep, ...added].slice(0, 6);
+  await save(d); removed.forEach(delImage); res.json(it);
+}));
+
 app.delete('/api/items/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), it = d.items.find(x => x.id === req.params.id);
   if (!it) return res.status(404).json({ error: 'Negăsit' });
