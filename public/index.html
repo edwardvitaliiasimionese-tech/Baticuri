@@ -62,6 +62,7 @@ footer a{color:#9d174d}
 header,.shop,footer{position:relative;z-index:1}
 .card.sold .gal,.card.sold .nopic{opacity:.4}
 button:disabled{opacity:.6;cursor:default}
+.vr{display:flex;gap:6px;margin-bottom:6px}.vr input:first-child{flex:2}.vr input:nth-child(2){flex:1}.vr button{padding:0 10px}
 </style>
 </head>
 <body>
@@ -84,7 +85,7 @@ async function api(url,opt){
 }
 async function refresh(){
   S=await api('/api/shop');admin=(await api('/api/me')).admin;S.orders=admin?await api('/api/orders'):[];
-  cart=cart.filter(id=>S.items.some(i=>i.id===id&&!i.sold&&!i.reserved));saveCart();
+  cart=cart.filter(k=>{const u=unit(k);return u&&!u.sold&&!u.reserved;});saveCart();
   document.title=S.settings.shop;render();
 }
 function modal(html,lock){
@@ -104,8 +105,8 @@ function render(){
    '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Coș'+(cart.length?' ('+cart.length+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>'+
    '<div class="shop"><main>'+(S.items.length?S.items.map(it=>
     '<div class="card'+(it.sold||it.reserved?' sold':'')+'">'+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
-    '<div class="body"><h2 data-open="'+esc(it.id)+'">'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+eur(it.price)+'</div>'+
-    (it.sold?'<button disabled>Vândut</button>':it.reserved?'<div class="nd">Articolul nu este disponibil momentan</div><button disabled>Indisponibil</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'✓ Adăugat':'＋ Coș')+'</button>')+
+    '<div class="body"><h2 data-open="'+esc(it.id)+'">'+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+(it.variants&&it.variants.length?'de la ':'')+eur(it.price)+'</div>'+
+    (it.sold?'<button disabled>Vândut</button>':it.reserved?'<div class="nd">Articolul nu este disponibil momentan</div><button disabled>Indisponibil</button>':(it.variants&&it.variants.length)?'<button class="pri" data-open="'+esc(it.id)+'">Alege</button>':'<button class="pri" data-cart="'+esc(it.id)+'">'+(cart.includes(it.id)?'✓ Adăugat':'＋ Coș')+'</button>')+
     (admin?'<button data-edit="'+esc(it.id)+'">Editează</button><button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
     :'<div class="empty">Niciun articol deocamdată.</div>')+'</main>'+sideHtml()+'</div>';
   $('#foot').innerHTML=admin?'':'<a id="login">Zonă vânzător</a>';
@@ -150,12 +151,29 @@ function sideHtml(){
     :'<p class="note">Gol deocamdată.</p>')+'</aside>'+ordersAside()+'</div>';
 }
 
+function unit(key){
+  const [iid,vid]=String(key).split(':'),it=S.items.find(i=>i.id===iid);
+  if(!it)return null;
+  if(vid){const v=(it.variants||[]).find(x=>x.id===vid);return v?{id:key,title:it.title+' – '+v.name,price:v.price,sold:v.sold,reserved:v.reserved}:null;}
+  if((it.variants||[]).length)return null;
+  return {id:key,title:it.title,price:it.price,sold:it.sold,reserved:it.reserved};
+}
+
 function openItem(it){
   if(!it)return;
-  const o=modal((it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+'<h3>'+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p>'+(it.reserved&&!it.sold?'<p class="nd">Articolul nu este disponibil momentan</p>':'')+'<div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+(it.sold?'<button disabled>Vândut</button>':it.reserved?'<button disabled>Indisponibil</button>':'<button class="pri" id="tg">'+(cart.includes(it.id)?'Elimină din coș':'Adaugă în coș')+'</button>')+'<button id="cl">Închide</button></div>');
-  o.querySelector('#cl').onclick=()=>o.remove();
-  const tg=o.querySelector('#tg');
-  if(tg)tg.onclick=()=>{cart=cart.includes(it.id)?cart.filter(x=>x!==it.id):[...cart,it.id];saveCart();render();o.remove();};
+  const o=modal('');
+  const btn=(key,sold,res)=>sold?'<button disabled>Vândut</button>':res?'<button disabled>Indisponibil</button>':'<button class="pri" data-tg="'+esc(key)+'">'+(cart.includes(key)?'Elimină din coș':'Adaugă în coș')+'</button>';
+  const draw=()=>{
+    const V=it.variants||[];
+    o.querySelector('.dlg').innerHTML=(it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+
+      '<h3>'+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p>'+
+      (V.length?V.map(v=>'<div class="box"><b>'+esc(v.name)+'</b><small>'+eur(v.price)+(v.reserved&&!v.sold?' · Articolul nu este disponibil momentan':'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div>').join('')
+       :(it.reserved&&!it.sold?'<p class="nd">Articolul nu este disponibil momentan</p>':'')+'<div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+btn(it.id,it.sold,it.reserved)+'</div>')+
+      '<div class="row"><button id="cl">Închide</button></div>';
+    o.querySelector('#cl').onclick=()=>o.remove();
+    o.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{const k=b.dataset.tg;cart=cart.includes(k)?cart.filter(x=>x!==k):[...cart,k];saveCart();render();draw();});
+  };
+  draw();
 }
 
 function cartView(){
@@ -216,7 +234,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Să îl porți sănătoasă! Mulțumesc că ai cumpărat de la noi!';
+  const txt='Bună '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem târgul. Mulțumesc!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -265,10 +283,25 @@ function photoPicker(o){
   return st;
 }
 
+const VAR_UI='<label>Variante (opțional) : fiecare cu prețul ei</label><div id="vars"></div><div class="row"><button type="button" id="addv">+ Adaugă variantă</button></div>';
+
+function variantsEditor(o,init){
+  const V=(init||[]).map(v=>({id:v.id,name:v.name,price:v.price}));
+  const draw=()=>{
+    o.querySelector('#vars').innerHTML=V.map((v,i)=>'<div class="vr"><input data-vn="'+i+'" placeholder="Nume (ex. albastră)" value="'+esc(v.name)+'"><input data-vp="'+i+'" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Preț" value="'+esc(v.price)+'"><button type="button" data-vx="'+i+'">✕</button></div>').join('');
+    o.querySelectorAll('[data-vn]').forEach(x=>x.oninput=()=>{V[+x.dataset.vn].name=x.value;});
+    o.querySelectorAll('[data-vp]').forEach(x=>x.oninput=()=>{V[+x.dataset.vp].price=x.value;});
+    o.querySelectorAll('[data-vx]').forEach(x=>x.onclick=()=>{V.splice(+x.dataset.vx,1);draw();});
+  };
+  o.querySelector('#addv').onclick=()=>{V.push({name:'',price:''});draw();};
+  draw();
+  return V;
+}
+
 function editForm(it){
   if(!it)return;
   let keep=[...it.imgs],blobs=[];
-  const o=modal('<h3>Editează articolul</h3><label>Titlu</label><input id="t" value="'+esc(it.title)+'"><label>Descriere</label><textarea id="d" rows="3">'+esc(it.desc)+'</textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(it.price)+'"><label>Pozele actuale (apasă ✕ ca să ștergi o poză)</label><div class="thumbs" id="old"></div><label>Adaugă poze noi (maxim 6 în total)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
+  const o=modal('<h3>Editează articolul</h3><label>Titlu</label><input id="t" value="'+esc(it.title)+'"><label>Descriere</label><textarea id="d" rows="3">'+esc(it.desc)+'</textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(it.price)+'">'+VAR_UI+'<label>Pozele actuale (apasă ✕ ca să ștergi o poză)</label><div class="thumbs" id="old"></div><label>Adaugă poze noi (maxim 6 în total)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
   const drawOld=()=>{
     o.querySelector('#old').innerHTML=keep.map((s,i)=>'<div style="position:relative"><img src="'+esc(s)+'"><button data-k="'+i+'" style="position:absolute;top:-6px;right:-6px;padding:0 6px;border-radius:50%">✕</button></div>').join('')||'<span class="note">Nicio poză</span>';
     o.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{keep.splice(+b.dataset.k,1);drawOld();});
@@ -276,11 +309,14 @@ function editForm(it){
   drawOld();
   o.querySelector('#no').onclick=()=>o.remove();
   const P=photoPicker(o);
+  const V=variantsEditor(o,it.variants||[]);
   o.querySelector('#ok').onclick=async e=>{
     const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
-    if(!t||p===''){alert('Trebuie un titlu și un preț.');return;}
+    const vs=V.filter(v=>String(v.name).trim());
+    if(vs.some(v=>v.price===''||isNaN(parseFloat(v.price))||parseFloat(v.price)<0)){alert('Fiecare variantă are nevoie de nume și preț.');return;}
+    if(!t||(!vs.length&&p==='')){alert('Trebuie un titlu și un preț.');return;}
     if(keep.length+P.blobs.length>6){alert('Maxim 6 poze.');return;}
-    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p);fd.append('keep',JSON.stringify(keep));
+    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p||'0');fd.append('variants',JSON.stringify(vs.map(v=>({id:v.id,name:String(v.name).trim(),price:parseFloat(v.price)}))));fd.append('keep',JSON.stringify(keep));
     P.blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
     e.target.disabled=true;e.target.textContent='Se trimite…';
     try{await api('/api/items/'+it.id,{method:'PUT',body:fd});o.remove();refresh();}
@@ -290,13 +326,16 @@ function editForm(it){
 
 function addForm(){
   let blobs=[];
-  const o=modal('<h3>Articol nou</h3><label>Titlu</label><input id="t"><label>Descriere</label><textarea id="d" rows="3"></textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal"><label>Poze (maxim 6)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Publică</button></div>');
+  const o=modal('<h3>Articol nou</h3><label>Titlu</label><input id="t"><label>Descriere</label><textarea id="d" rows="3"></textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal">'+VAR_UI+'<label>Poze (maxim 6)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Publică</button></div>');
   o.querySelector('#no').onclick=()=>o.remove();
   const P=photoPicker(o);
+  const V=variantsEditor(o,[]);
   o.querySelector('#ok').onclick=async e=>{
     const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
-    if(!t||p===''){alert('Trebuie un titlu și un preț.');return;}
-    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p);
+    const vs=V.filter(v=>String(v.name).trim());
+    if(vs.some(v=>v.price===''||isNaN(parseFloat(v.price))||parseFloat(v.price)<0)){alert('Fiecare variantă are nevoie de nume și preț.');return;}
+    if(!t||(!vs.length&&p==='')){alert('Trebuie un titlu și un preț.');return;}
+    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p||'0');fd.append('variants',JSON.stringify(vs.map(v=>({id:v.id,name:String(v.name).trim(),price:parseFloat(v.price)}))));
     P.blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
     e.target.disabled=true;e.target.textContent='Se trimite…';
     try{await api('/api/items',{method:'POST',body:fd});o.remove();refresh();}
