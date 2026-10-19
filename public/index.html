@@ -216,7 +216,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc mult că ai cumpărat de la noi!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Să îl porți sănătoasă! Mulțumesc că ai cumpărat de la noi!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -247,25 +247,41 @@ function ordersView(){
   draw();
 }
 
+const PHOTO_UI='<div class="row"><button type="button" id="camb">📷 Fă o poză</button></div><input id="cam" type="file" accept="image/*" capture="environment" hidden><label>sau alege din galerie</label><input id="f" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div>';
+
+function photoPicker(o){
+  const st={blobs:[]};
+  const draw=()=>{
+    o.querySelector('#th').innerHTML=st.blobs.map((b,i)=>'<div style="position:relative"><img src="'+URL.createObjectURL(b)+'"><button type="button" data-n="'+i+'" style="position:absolute;top:-6px;right:-6px;padding:0 6px;border-radius:50%">✕</button></div>').join('');
+    o.querySelectorAll('[data-n]').forEach(x=>x.onclick=()=>{st.blobs.splice(+x.dataset.n,1);draw();});
+  };
+  const add=async files=>{
+    const nb=(await Promise.all([...files].map(resize))).filter(Boolean);
+    st.blobs=[...st.blobs,...nb].slice(0,6);draw();
+  };
+  o.querySelector('#camb').onclick=()=>o.querySelector('#cam').click();
+  o.querySelector('#cam').onchange=e=>{add(e.target.files);e.target.value='';};
+  o.querySelector('#f').onchange=e=>{add(e.target.files);e.target.value='';};
+  return st;
+}
+
 function editForm(it){
   if(!it)return;
   let keep=[...it.imgs],blobs=[];
-  const o=modal('<h3>Editează articolul</h3><label>Titlu</label><input id="t" value="'+esc(it.title)+'"><label>Descriere</label><textarea id="d" rows="3">'+esc(it.desc)+'</textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(it.price)+'"><label>Pozele actuale (apasă ✕ ca să ștergi o poză)</label><div class="thumbs" id="old"></div><label>Adaugă poze noi (maxim 6 în total)</label><input id="f" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
+  const o=modal('<h3>Editează articolul</h3><label>Titlu</label><input id="t" value="'+esc(it.title)+'"><label>Descriere</label><textarea id="d" rows="3">'+esc(it.desc)+'</textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(it.price)+'"><label>Pozele actuale (apasă ✕ ca să ștergi o poză)</label><div class="thumbs" id="old"></div><label>Adaugă poze noi (maxim 6 în total)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
   const drawOld=()=>{
     o.querySelector('#old').innerHTML=keep.map((s,i)=>'<div style="position:relative"><img src="'+esc(s)+'"><button data-k="'+i+'" style="position:absolute;top:-6px;right:-6px;padding:0 6px;border-radius:50%">✕</button></div>').join('')||'<span class="note">Nicio poză</span>';
     o.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{keep.splice(+b.dataset.k,1);drawOld();});
   };
   drawOld();
   o.querySelector('#no').onclick=()=>o.remove();
-  o.querySelector('#f').onchange=async e=>{
-    blobs=(await Promise.all([...e.target.files].slice(0,6).map(resize))).filter(Boolean);
-    o.querySelector('#th').innerHTML=blobs.map(b=>'<img src="'+URL.createObjectURL(b)+'">').join('');};
+  const P=photoPicker(o);
   o.querySelector('#ok').onclick=async e=>{
     const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
     if(!t||p===''){alert('Trebuie un titlu și un preț.');return;}
-    if(keep.length+blobs.length>6){alert('Maxim 6 poze.');return;}
+    if(keep.length+P.blobs.length>6){alert('Maxim 6 poze.');return;}
     const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p);fd.append('keep',JSON.stringify(keep));
-    blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
+    P.blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
     e.target.disabled=true;e.target.textContent='Se trimite…';
     try{await api('/api/items/'+it.id,{method:'PUT',body:fd});o.remove();refresh();}
     catch(x){alert(x.message);e.target.disabled=false;e.target.textContent='Salvează';}
@@ -274,16 +290,14 @@ function editForm(it){
 
 function addForm(){
   let blobs=[];
-  const o=modal('<h3>Articol nou</h3><label>Titlu</label><input id="t"><label>Descriere</label><textarea id="d" rows="3"></textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal"><label>Poze (maxim 6)</label><input id="f" type="file" accept="image/*" multiple><div class="thumbs" id="th"></div><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Publică</button></div>');
+  const o=modal('<h3>Articol nou</h3><label>Titlu</label><input id="t"><label>Descriere</label><textarea id="d" rows="3"></textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal"><label>Poze (maxim 6)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Publică</button></div>');
   o.querySelector('#no').onclick=()=>o.remove();
-  o.querySelector('#f').onchange=async e=>{
-    blobs=(await Promise.all([...e.target.files].slice(0,6).map(resize))).filter(Boolean);
-    o.querySelector('#th').innerHTML=blobs.map(b=>'<img src="'+URL.createObjectURL(b)+'">').join('');};
+  const P=photoPicker(o);
   o.querySelector('#ok').onclick=async e=>{
     const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
     if(!t||p===''){alert('Trebuie un titlu și un preț.');return;}
     const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p);
-    blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
+    P.blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
     e.target.disabled=true;e.target.textContent='Se trimite…';
     try{await api('/api/items',{method:'POST',body:fd});o.remove();refresh();}
     catch(x){alert(x.message);e.target.disabled=false;e.target.textContent='Publică';}
