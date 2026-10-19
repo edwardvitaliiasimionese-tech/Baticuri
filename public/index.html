@@ -70,6 +70,7 @@ button:disabled{opacity:.6;cursor:default}
 .sw{display:inline-block;width:.8em;height:.8em;border-radius:50%;border:1px solid rgba(0,0,0,.35);margin-right:5px;vertical-align:-1px}
 .dlg .sw{width:1em;height:1em}
 .vc{display:flex;gap:4px;align-items:center}.vc input[type=color]{width:34px;height:34px;padding:0;border:none;background:none;cursor:pointer}
+.vc{flex-wrap:wrap}.vc.open{flex-basis:100%}.cp{flex-basis:100%;width:100%}.pal{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.pal button{width:26px;height:26px;border-radius:50%;padding:0;border:1px solid rgba(0,0,0,.35)}
 </style>
 </head>
 <body>
@@ -248,7 +249,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc mult ca ai cumparat de la noi! Sa il porti sanatoasa!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc mult ca ai cumparat de la noi! Sa-l porti sanatoasa!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -299,21 +300,53 @@ function photoPicker(o){
 
 const sw=c=>c&&/^#[0-9a-f]{6}$/i.test(c)?'<span class="sw" style="background:'+c+'"></span>':'';
 
-function colorPicker(box,init,cb){
-  const st={v:init||''};
+function pickFromPhoto(srcs,onPick){
+  if(!srcs.length){alert('Adaugă mai întâi o poză.');return;}
+  const o=modal('<h3>Alege culoarea din poză</h3><p class="note">Apasă pe poză, exact în locul cu culoarea dorită.</p><div class="thumbs" id="pt">'+srcs.map((x,i)=>'<img src="'+esc(x)+'" data-p="'+i+'" style="cursor:pointer">').join('')+'</div><canvas id="cv" style="width:100%;margin-top:8px;border-radius:10px"></canvas><div class="row" style="align-items:center"><span id="pv" class="sw" style="width:34px;height:34px;flex:none;margin:0;background:transparent"></span><button class="pri" id="ok" disabled>Folosește culoarea</button><button id="no">Anulează</button></div>');
+  const cv=o.querySelector('#cv'),ctx=cv.getContext('2d',{willReadFrequently:true});let cur='';
+  const load=src=>{
+    const im=new Image();im.crossOrigin='anonymous';
+    im.onload=()=>{const k=Math.min(1,700/Math.max(im.width,im.height));cv.width=Math.round(im.width*k);cv.height=Math.round(im.height*k);ctx.drawImage(im,0,0,cv.width,cv.height);};
+    im.onerror=()=>alert('Nu pot citi această poză. Încearcă cu o poză nouă.');
+    im.src=src;
+  };
+  o.querySelectorAll('[data-p]').forEach(t=>t.onclick=()=>load(srcs[+t.dataset.p]));
+  load(srcs[0]);
+  cv.onclick=e=>{
+    const r=cv.getBoundingClientRect(),x=Math.round((e.clientX-r.left)*cv.width/r.width),y=Math.round((e.clientY-r.top)*cv.height/r.height);
+    try{
+      const x0=Math.max(0,x-4),y0=Math.max(0,y-4),w=Math.min(9,cv.width-x0),h=Math.min(9,cv.height-y0),d=ctx.getImageData(x0,y0,w,h).data;
+      let R=0,G=0,B=0,n=d.length/4;
+      for(let i=0;i<d.length;i+=4){R+=d[i];G+=d[i+1];B+=d[i+2];}
+      cur='#'+[R,G,B].map(v=>Math.round(v/n).toString(16).padStart(2,'0')).join('');
+      o.querySelector('#pv').style.background=cur;o.querySelector('#ok').disabled=false;
+    }catch(err){alert('Această poză nu poate fi citită. Încearcă cu o poză nouă.');}
+  };
+  o.querySelector('#no').onclick=()=>o.remove();
+  o.querySelector('#ok').onclick=()=>{onPick(cur);o.remove();};
+}
+
+function colorPicker(box,init,cb,getSrcs){
+  const st={v:init||''};let open=false;
+  const PRE=['#87ceeb','#1e90ff','#00008b','#2e8b57','#90ee90','#ffd700','#ff8c00','#ff0000','#ff69b4','#800080','#8b4513','#808080','#000000','#ffffff'];
   const set=v=>{st.v=v;if(cb)cb(v);draw();};
   const draw=()=>{
-    box.innerHTML=st.v?'<input type="color" value="'+esc(st.v)+'"><button type="button" data-cx>✕</button>':'<button type="button" data-ca>🎨 Culoare</button>';
-    const i=box.querySelector('input');if(i)i.oninput=()=>{st.v=i.value;if(cb)cb(i.value);};
-    const x=box.querySelector('[data-cx]');if(x)x.onclick=()=>set('');
-    const a=box.querySelector('[data-ca]');if(a)a.onclick=()=>set('#87ceeb');
+    box.classList.toggle('open',open);
+    box.innerHTML='<button type="button" data-tog>'+(st.v?'<span class="sw" style="background:'+esc(st.v)+';margin:0"></span> ':'🎨 ')+'Culoare</button>'+
+      (open?'<div class="cp"><div class="pal">'+PRE.map(c=>'<button type="button" data-pc="'+c+'" style="background:'+c+'"></button>').join('')+'</div><div class="row" style="margin-top:6px"><input type="color" data-cc value="'+esc(st.v||'#87ceeb')+'"><button type="button" data-pp>💧 Pipetă din poză</button><button type="button" data-cx>✕ Fără</button></div></div>':'');
+    box.querySelector('[data-tog]').onclick=()=>{open=!open;draw();};
+    box.querySelectorAll('[data-pc]').forEach(x=>x.onclick=()=>set(x.dataset.pc));
+    const cc=box.querySelector('[data-cc]');
+    if(cc){cc.oninput=()=>{st.v=cc.value;if(cb)cb(cc.value);};cc.onchange=()=>set(cc.value);}
+    const pp=box.querySelector('[data-pp]');if(pp)pp.onclick=()=>pickFromPhoto(getSrcs?getSrcs():[],c=>set(c));
+    const cx=box.querySelector('[data-cx]');if(cx)cx.onclick=()=>set('');
   };
   draw();return st;
 }
 
 const VAR_UI='<label>Culoare (opțională)</label><div id="icol" class="vc"></div><label>Variante (opțional) : fiecare cu prețul ei</label><div id="vars"></div><div class="row"><button type="button" id="addv">+ Adaugă variantă</button></div>';
 
-function variantsEditor(o,init){
+function variantsEditor(o,init,getSrcs){
   const V=(init||[]).map(v=>({id:v.id,name:v.name,price:v.price,img:v.img||'',file:null,url:v.img||'',color:v.color||''}));
   const draw=()=>{
     o.querySelector('#vars').innerHTML=V.map((v,i)=>'<div class="vr"><div class="vp">'+(v.url?'<img src="'+esc(v.url)+'">':'')+'<button type="button" data-vc="'+i+'" title="Fă o poză">📷</button><button type="button" data-vg="'+i+'" title="Alege din galerie">🖼</button>'+(v.url?'<button type="button" data-vd="'+i+'">🗑</button>':'')+'<input type="file" accept="image/*" capture="environment" hidden data-vf="'+i+'"><input type="file" accept="image/*" hidden data-vf="'+i+'"></div><input data-vn="'+i+'" placeholder="Nume (ex. albastră)" value="'+esc(v.name)+'"><input data-vp="'+i+'" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Preț" value="'+esc(v.price)+'"><div class="vc" data-vcol="'+i+'"></div><button type="button" data-vx="'+i+'">✕</button></div>').join('');
@@ -323,7 +356,7 @@ function variantsEditor(o,init){
     o.querySelectorAll('[data-vc]').forEach(x=>x.onclick=()=>o.querySelector('[data-vf="'+x.dataset.vc+'"][capture]').click());
     o.querySelectorAll('[data-vg]').forEach(x=>x.onclick=()=>o.querySelector('[data-vf="'+x.dataset.vg+'"]:not([capture])').click());
     o.querySelectorAll('[data-vd]').forEach(x=>x.onclick=()=>{const v=V[+x.dataset.vd];v.file=null;v.url='';v.img='';draw();});
-    o.querySelectorAll('[data-vcol]').forEach(b=>{const k=+b.dataset.vcol;colorPicker(b,V[k].color,c=>{V[k].color=c;});});
+    o.querySelectorAll('[data-vcol]').forEach(b=>{const k=+b.dataset.vcol;colorPicker(b,V[k].color,c=>{V[k].color=c;},()=>[...new Set([V[k].url,...(getSrcs?getSrcs():[])].filter(Boolean))]);});
     o.querySelectorAll('[data-vf]').forEach(x=>x.onchange=async()=>{
       const bl=x.files[0]?await resize(x.files[0]):null;
       if(bl){const v=V[+x.dataset.vf];v.file=bl;v.url=URL.createObjectURL(bl);draw();}
@@ -345,8 +378,9 @@ function editForm(it){
   drawOld();
   o.querySelector('#no').onclick=()=>o.remove();
   const P=photoPicker(o);
-  const V=variantsEditor(o,it.variants||[]);
-  const C=colorPicker(o.querySelector('#icol'),it.color||'');
+  const srcs=()=>[...keep,...P.blobs.map(b=>URL.createObjectURL(b)),...V.map(v=>v.url).filter(Boolean)];
+  const V=variantsEditor(o,it.variants||[],()=>srcs());
+  const C=colorPicker(o.querySelector('#icol'),it.color||'',null,()=>srcs());
   o.querySelector('#ok').onclick=async e=>{
     const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
     const vs=V.filter(v=>String(v.name).trim());
@@ -366,8 +400,9 @@ function addForm(){
   const o=modal('<h3>Articol nou</h3><label>Titlu</label><input id="t"><label>Descriere</label><textarea id="d" rows="3"></textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal">'+VAR_UI+'<label>Poze (maxim 6)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Publică</button></div>');
   o.querySelector('#no').onclick=()=>o.remove();
   const P=photoPicker(o);
-  const V=variantsEditor(o,[]);
-  const C=colorPicker(o.querySelector('#icol'),'');
+  const srcs=()=>[...P.blobs.map(b=>URL.createObjectURL(b)),...V.map(v=>v.url).filter(Boolean)];
+  const V=variantsEditor(o,[],()=>srcs());
+  const C=colorPicker(o.querySelector('#icol'),'',null,()=>srcs());
   o.querySelector('#ok').onclick=async e=>{
     const t=o.querySelector('#t').value.trim(),p=o.querySelector('#p').value;
     const vs=V.filter(v=>String(v.name).trim());
