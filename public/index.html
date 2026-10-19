@@ -152,7 +152,7 @@ function ordersAside(){
 }
 
 function sideHtml(){
-  const L=cart.map(id=>S.items.find(i=>i.id===id)).filter(Boolean),total=L.reduce((t,i)=>t+i.price,0);
+  const L=cart.map(k=>unit(k)).filter(Boolean),total=L.reduce((t,i)=>t+i.price,0);
   return '<div class="side"><aside><h3>🛒 Coșul meu</h3>'+(L.length?
     L.map(i=>'<div class="ln"><span class="t">'+esc(i.title)+'</span><span class="p">'+eur(i.price)+'</span><button data-x="'+esc(i.id)+'" aria-label="Elimină">✕</button></div>').join('')+
     '<div class="tot"><span>Total</span><b>'+eur(total)+'</b></div><button class="pri" id="side-go">Comandă</button>'
@@ -195,7 +195,7 @@ function cartView(){
   const o=modal('');
   const draw=()=>{
     const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'';
-    const L=cart.map(id=>S.items.find(i=>i.id===id)).filter(Boolean),total=L.reduce((t,i)=>t+i.price,0);
+    const L=cart.map(k=>unit(k)).filter(Boolean),total=L.reduce((t,i)=>t+i.price,0);
     o.querySelector('.dlg').innerHTML='<h3>Coșul meu</h3>'+(L.length?
       L.map(i=>'<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+'</small><button class="dng" style="margin-top:8px" data-rm="'+esc(i.id)+'">Elimină</button></div>').join('')+
       '<div class="box"><small>Total de plată</small><b>'+eur(total)+'</b></div>'+
@@ -249,7 +249,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc mult ca ai cumparat de la noi! Sa-l porti sanatoasa!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne intalnim facem schimbul. Mulțumesc mult ca ai cumparat de la noi! Sa-l porti sanatoasa!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -370,7 +370,7 @@ function variantsEditor(o,init,getSrcs){
 function editForm(it){
   if(!it)return;
   let keep=[...it.imgs],blobs=[];
-  const o=modal('<h3>Editează articolul</h3><label>Titlu</label><input id="t" value="'+esc(it.title)+'"><label>Descriere</label><textarea id="d" rows="3">'+esc(it.desc)+'</textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(it.price)+'">'+VAR_UI+'<label>Pozele actuale (apasă ✕ ca să ștergi o poză)</label><div class="thumbs" id="old"></div><label>Adaugă poze noi (maxim 6 în total)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
+  const o=modal('<h3>Editează articolul</h3><label>Titlu</label><input id="t" value="'+esc(it.title)+'"><label>Descriere</label><textarea id="d" rows="3">'+esc(it.desc)+'</textarea><label>Preț (dacă nu ai variante)</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal" value="'+esc(it.price)+'">'+VAR_UI+'<label>Pozele actuale (apasă ✕ ca să ștergi o poză)</label><div class="thumbs" id="old"></div><label>Adaugă poze noi (maxim 6 în total)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
   const drawOld=()=>{
     o.querySelector('#old').innerHTML=keep.map((s,i)=>'<div style="position:relative"><img src="'+esc(s)+'"><button data-k="'+i+'" style="position:absolute;top:-6px;right:-6px;padding:0 6px;border-radius:50%">✕</button></div>').join('')||'<span class="note">Nicio poză</span>';
     o.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{keep.splice(+b.dataset.k,1);drawOld();});
@@ -397,7 +397,7 @@ function editForm(it){
 
 function addForm(){
   let blobs=[];
-  const o=modal('<h3>Articol nou</h3><label>Titlu</label><input id="t"><label>Descriere</label><textarea id="d" rows="3"></textarea><label>Preț</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal">'+VAR_UI+'<label>Poze (maxim 6)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Publică</button></div>');
+  const o=modal('<h3>Articol nou</h3><label>Titlu</label><input id="t"><label>Descriere</label><textarea id="d" rows="3"></textarea><label>Preț (dacă nu ai variante)</label><input id="p" type="number" min="0" step="0.01" inputmode="decimal">'+VAR_UI+'<label>Poze (maxim 6)</label>'+PHOTO_UI+'<div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Publică</button></div>');
   o.querySelector('#no').onclick=()=>o.remove();
   const P=photoPicker(o);
   const srcs=()=>[...P.blobs.map(b=>URL.createObjectURL(b)),...V.map(v=>v.url).filter(Boolean)];
