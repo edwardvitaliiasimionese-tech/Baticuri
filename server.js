@@ -45,7 +45,38 @@ const limiter = (max, ms) => { const m = new Map(); return (req, res, next) => {
 const throttle = limiter(10, 15 * 60e3);
 const orderLimit = limiter(20, 60 * 60e3);
 const oitems = o => o.items || [{ id: o.itemId, title: o.title, price: o.price }];
-const sync = d => d.items.forEach(it => { it.sold = d.orders.some(o => o.paid && oitems(o).some(i => i.id === it.id)); });
+const isPaid = (d, key) => d.orders.some(o => o.paid && oitems(o).some(i => i.id === key));
+const isPending = (d, key) => d.orders.some(o => !o.paid && oitems(o).some(i => i.id === key));
+const sync = d => d.items.forEach(it => {
+  if (it.variants && it.variants.length) { it.variants.forEach(v => { v.sold = isPaid(d, it.id + ':' + v.id); }); it.sold = it.variants.every(v => v.sold); }
+  else it.sold = isPaid(d, it.id);
+});
+const view = (d, it) => {
+  if (it.variants && it.variants.length) {
+    const variants = it.variants.map(v => ({ ...v, reserved: !v.sold && isPending(d, it.id + ':' + v.id) }));
+    return { ...it, variants, reserved: !it.sold && variants.filter(v => !v.sold).every(v => v.reserved) };
+  }
+  return { ...it, reserved: !it.sold && isPending(d, it.id) };
+};
+const resolve = (d, key) => {
+  const [iid, vid] = String(key).split(':'), it = d.items.find(x => x.id === iid);
+  if (!it) return null;
+  if (vid) { const v = (it.variants || []).find(x => x.id === vid); return v ? { title: it.title + ' – ' + v.name, price: v.price, sold: !!v.sold } : null; }
+  if ((it.variants || []).length) return null;
+  return { title: it.title, price: it.price, sold: !!it.sold };
+};
+const parseVariants = (raw, old) => {
+  let a; try { a = JSON.parse(raw || '[]'); } catch (e) { a = []; }
+  if (!Array.isArray(a)) a = [];
+  const out = [];
+  for (const v of a.slice(0, 20)) {
+    const name = String(v.name || '').trim().slice(0, 60), price = parseFloat(v.price);
+    if (!name || !isFinite(price) || price < 0) return null;
+    const prev = (old || []).find(x => x.id === v.id);
+    out.push({ id: prev ? prev.id : crypto.randomBytes(4).toString('hex'), name, price, sold: prev ? !!prev.sold : false });
+  }
+  return out;
+};
 
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 6 }, fileFilter: (req, f, cb) => cb(null, !!EXT[f.mimetype]) });
@@ -55,7 +86,7 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa }, items: d.items.map(it => ({ ...it, reserved: !it.sold && d.orders.some(o => !o.paid && oitems(o).some(i => i.id === it.id)) })) }); }));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa }, items: d.items.map(it => view(d, it)) }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
@@ -73,19 +104,25 @@ app.put('/api/settings', needAdmin, wrap(async (req, res) => {
 }));
 
 app.post('/api/items', needAdmin, upload.array('images', 6), wrap(async (req, res) => {
-  const title = String(req.body.title || '').trim().slice(0, 100), price = parseFloat(req.body.price);
+  const title = String(req.body.title || '').trim().slice(0, 100);
+  const variants = parseVariants(req.body.variants);
+  if (variants === null) return res.status(400).json({ error: 'Fiecare variantă are nevoie de nume și preț' });
+  const price = variants.length ? Math.min(...variants.map(v => v.price)) : parseFloat(req.body.price);
   if (!title || !isFinite(price) || price < 0) return res.status(400).json({ error: 'Titlul și prețul sunt obligatorii' });
   const imgs = [];
   for (const f of req.files || []) imgs.push(await putImage(f));
   const d = await load();
-  const item = { id: crypto.randomBytes(6).toString('hex'), title, desc: String(req.body.desc || '').trim().slice(0, 2000), price, imgs };
+  const item = { id: crypto.randomBytes(6).toString('hex'), title, desc: String(req.body.desc || '').trim().slice(0, 2000), price, imgs, variants: variants.length ? variants : undefined };
   d.items.unshift(item); await save(d); res.json(item);
 }));
 
 app.put('/api/items/:id', needAdmin, upload.array('images', 6), wrap(async (req, res) => {
   const d = await load(), it = d.items.find(x => x.id === req.params.id);
   if (!it) return res.status(404).json({ error: 'Negăsit' });
-  const title = String(req.body.title || '').trim().slice(0, 100), price = parseFloat(req.body.price);
+  const title = String(req.body.title || '').trim().slice(0, 100);
+  const variants = parseVariants(req.body.variants, it.variants);
+  if (variants === null) return res.status(400).json({ error: 'Fiecare variantă are nevoie de nume și preț' });
+  const price = variants.length ? Math.min(...variants.map(v => v.price)) : parseFloat(req.body.price);
   if (!title || !isFinite(price) || price < 0) return res.status(400).json({ error: 'Titlul și prețul sunt obligatorii' });
   let keep = [];
   try { keep = JSON.parse(req.body.keep || '[]'); } catch (e) {}
@@ -93,7 +130,7 @@ app.put('/api/items/:id', needAdmin, upload.array('images', 6), wrap(async (req,
   const added = [];
   for (const f of req.files || []) added.push(await putImage(f));
   const removed = it.imgs.filter(u => !keep.includes(u));
-  it.title = title; it.desc = String(req.body.desc || '').trim().slice(0, 2000); it.price = price;
+  it.title = title; it.desc = String(req.body.desc || '').trim().slice(0, 2000); it.price = price; it.variants = variants.length ? variants : undefined; sync(d);
   it.imgs = [...keep, ...added].slice(0, 6);
   await save(d); removed.forEach(delImage); res.json(it);
 }));
@@ -114,11 +151,11 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   if (!name || phone.length < 3) return res.status(400).json({ error: 'Numele și telefonul sunt obligatorii' });
   const items = [];
   for (const id of ids) {
-    const it = d.items.find(x => x.id === id);
-    if (!it) return res.status(404).json({ error: 'Un articol din coș nu mai există' });
-    if (it.sold) return res.status(409).json({ error: '„' + it.title + '” este deja vândut' });
-    if (d.orders.some(o => !o.paid && oitems(o).some(i => i.id === id))) return res.status(409).json({ error: '„' + it.title + '” nu este disponibil momentan' });
-    items.push({ id: it.id, title: it.title, price: it.price });
+    const u = resolve(d, id);
+    if (!u) return res.status(404).json({ error: 'Un articol din coș nu mai există' });
+    if (u.sold) return res.status(409).json({ error: '„' + u.title + '” este deja vândut' });
+    if (isPending(d, id)) return res.status(409).json({ error: '„' + u.title + '” nu este disponibil momentan' });
+    items.push({ id, title: u.title, price: u.price });
   }
   if (d.orders.length >= 1000) return res.status(429).json({ error: 'Prea multe comenzi în așteptare' });
   const total = Math.round(items.reduce((t, i) => t + i.price, 0) * 100) / 100;
