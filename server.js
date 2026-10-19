@@ -73,13 +73,19 @@ const parseVariants = (raw, old) => {
     const name = String(v.name || '').trim().slice(0, 60), price = parseFloat(v.price);
     if (!name || !isFinite(price) || price < 0) return null;
     const prev = (old || []).find(x => x.id === v.id);
-    out.push({ id: prev ? prev.id : crypto.randomBytes(4).toString('hex'), name, price, sold: prev ? !!prev.sold : false });
+    out.push({ id: prev ? prev.id : crypto.randomBytes(4).toString('hex'), name, price, sold: prev ? !!prev.sold : false, img: prev && v.img && v.img === prev.img ? prev.img : '' });
   }
   return out;
 };
 
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 6 }, fileFilter: (req, f, cb) => cb(null, !!EXT[f.mimetype]) });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 30 }, fileFilter: (req, f, cb) => cb(null, !!EXT[f.mimetype]) });
+const vfields = upload.fields([{ name: 'images', maxCount: 6 }, { name: 'vimgs', maxCount: 20 }]);
+const applyVariantImages = async (req, variants) => {
+  let idx = []; try { idx = JSON.parse(req.body.vimgIdx || '[]'); } catch (e) {}
+  const files = (req.files && req.files.vimgs) || [];
+  for (let k = 0; k < files.length; k++) { const v = variants[+idx[k]]; if (v) v.img = await putImage(files[k]); }
+};
 
 const app = express();
 app.set('trust proxy', 1);
@@ -103,20 +109,21 @@ app.put('/api/settings', needAdmin, wrap(async (req, res) => {
   await save(d); res.json(d.settings);
 }));
 
-app.post('/api/items', needAdmin, upload.array('images', 6), wrap(async (req, res) => {
+app.post('/api/items', needAdmin, vfields, wrap(async (req, res) => {
   const title = String(req.body.title || '').trim().slice(0, 100);
   const variants = parseVariants(req.body.variants);
   if (variants === null) return res.status(400).json({ error: 'Fiecare variantă are nevoie de nume și preț' });
   const price = variants.length ? Math.min(...variants.map(v => v.price)) : parseFloat(req.body.price);
   if (!title || !isFinite(price) || price < 0) return res.status(400).json({ error: 'Titlul și prețul sunt obligatorii' });
   const imgs = [];
-  for (const f of req.files || []) imgs.push(await putImage(f));
+  for (const f of (req.files && req.files.images) || []) imgs.push(await putImage(f));
+  await applyVariantImages(req, variants);
   const d = await load();
   const item = { id: crypto.randomBytes(6).toString('hex'), title, desc: String(req.body.desc || '').trim().slice(0, 2000), price, imgs, variants: variants.length ? variants : undefined };
   d.items.unshift(item); await save(d); res.json(item);
 }));
 
-app.put('/api/items/:id', needAdmin, upload.array('images', 6), wrap(async (req, res) => {
+app.put('/api/items/:id', needAdmin, vfields, wrap(async (req, res) => {
   const d = await load(), it = d.items.find(x => x.id === req.params.id);
   if (!it) return res.status(404).json({ error: 'Negăsit' });
   const title = String(req.body.title || '').trim().slice(0, 100);
@@ -128,18 +135,22 @@ app.put('/api/items/:id', needAdmin, upload.array('images', 6), wrap(async (req,
   try { keep = JSON.parse(req.body.keep || '[]'); } catch (e) {}
   keep = keep.filter(u => it.imgs.includes(u));
   const added = [];
-  for (const f of req.files || []) added.push(await putImage(f));
+  for (const f of (req.files && req.files.images) || []) added.push(await putImage(f));
+  const oldVImgs = (it.variants || []).map(v => v.img).filter(Boolean);
+  await applyVariantImages(req, variants);
   const removed = it.imgs.filter(u => !keep.includes(u));
   it.title = title; it.desc = String(req.body.desc || '').trim().slice(0, 2000); it.price = price; it.variants = variants.length ? variants : undefined; sync(d);
   it.imgs = [...keep, ...added].slice(0, 6);
-  await save(d); removed.forEach(delImage); res.json(it);
+  await save(d); removed.forEach(delImage);
+  const keepV = new Set(variants.map(v => v.img)); oldVImgs.filter(u => !keepV.has(u)).forEach(delImage);
+  res.json(it);
 }));
 
 app.delete('/api/items/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), it = d.items.find(x => x.id === req.params.id);
   if (!it) return res.status(404).json({ error: 'Negăsit' });
   d.items = d.items.filter(x => x !== it); await save(d);
-  it.imgs.forEach(delImage);
+  [...it.imgs, ...(it.variants || []).map(v => v.img).filter(Boolean)].forEach(delImage);
   res.json({ ok: true });
 }));
 
