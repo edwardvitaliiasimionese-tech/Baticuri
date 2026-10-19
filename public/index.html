@@ -62,7 +62,7 @@ footer a{color:#9d174d}
 header,.shop,footer{position:relative;z-index:1}
 .card.sold .gal,.card.sold .nopic{opacity:.4}
 button:disabled{opacity:.6;cursor:default}
-.vr{display:flex;gap:6px;margin-bottom:6px}.vr input:first-child{flex:2}.vr input:nth-child(2){flex:1}.vr button{padding:0 10px}
+.vr{display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap}.vr .vp{display:flex;gap:4px;align-items:center}.vr .vp img{width:40px;height:40px;object-fit:cover;border-radius:8px}.vr [data-vn]{flex:2;min-width:90px}.vr [data-vp]{flex:1;min-width:70px}.vr button{padding:4px 8px}.vimg{width:64px;height:64px;object-fit:cover;border-radius:10px}
 </style>
 </head>
 <body>
@@ -167,7 +167,7 @@ function openItem(it){
     const V=it.variants||[];
     o.querySelector('.dlg').innerHTML=(it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+
       '<h3>'+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p>'+
-      (V.length?V.map(v=>'<div class="box"><b>'+esc(v.name)+'</b><small>'+eur(v.price)+(v.reserved&&!v.sold?' · Articolul nu este disponibil momentan':'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div>').join('')
+      (V.length?V.map(v=>'<div class="box" style="display:flex;gap:10px;align-items:flex-start">'+(v.img?'<img class="vimg" src="'+esc(v.img)+'" alt="">':'')+'<div style="flex:1"><b>'+esc(v.name)+'</b><small>'+eur(v.price)+(v.reserved&&!v.sold?' · Articolul nu este disponibil momentan':'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div></div>').join('')
        :(it.reserved&&!it.sold?'<p class="nd">Articolul nu este disponibil momentan</p>':'')+'<div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+btn(it.id,it.sold,it.reserved)+'</div>')+
       '<div class="row"><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
@@ -234,7 +234,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schmbul. Mulțumesc ca ai cumparat de la noi! Sa il porti sanatoasa!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc ca ai cumparat de la noi! Sa il porti sanatoasa!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -286,14 +286,20 @@ function photoPicker(o){
 const VAR_UI='<label>Variante (opțional) : fiecare cu prețul ei</label><div id="vars"></div><div class="row"><button type="button" id="addv">+ Adaugă variantă</button></div>';
 
 function variantsEditor(o,init){
-  const V=(init||[]).map(v=>({id:v.id,name:v.name,price:v.price}));
+  const V=(init||[]).map(v=>({id:v.id,name:v.name,price:v.price,img:v.img||'',file:null,url:v.img||''}));
   const draw=()=>{
-    o.querySelector('#vars').innerHTML=V.map((v,i)=>'<div class="vr"><input data-vn="'+i+'" placeholder="Nume (ex. albastră)" value="'+esc(v.name)+'"><input data-vp="'+i+'" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Preț" value="'+esc(v.price)+'"><button type="button" data-vx="'+i+'">✕</button></div>').join('');
+    o.querySelector('#vars').innerHTML=V.map((v,i)=>'<div class="vr"><div class="vp">'+(v.url?'<img src="'+esc(v.url)+'">':'')+'<button type="button" data-vc="'+i+'">'+(v.url?'🔄':'📷')+'</button>'+(v.url?'<button type="button" data-vd="'+i+'">🗑</button>':'')+'<input type="file" accept="image/*" hidden data-vf="'+i+'"></div><input data-vn="'+i+'" placeholder="Nume (ex. albastră)" value="'+esc(v.name)+'"><input data-vp="'+i+'" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Preț" value="'+esc(v.price)+'"><button type="button" data-vx="'+i+'">✕</button></div>').join('');
     o.querySelectorAll('[data-vn]').forEach(x=>x.oninput=()=>{V[+x.dataset.vn].name=x.value;});
     o.querySelectorAll('[data-vp]').forEach(x=>x.oninput=()=>{V[+x.dataset.vp].price=x.value;});
     o.querySelectorAll('[data-vx]').forEach(x=>x.onclick=()=>{V.splice(+x.dataset.vx,1);draw();});
+    o.querySelectorAll('[data-vc]').forEach(x=>x.onclick=()=>o.querySelector('[data-vf="'+x.dataset.vc+'"]').click());
+    o.querySelectorAll('[data-vd]').forEach(x=>x.onclick=()=>{const v=V[+x.dataset.vd];v.file=null;v.url='';v.img='';draw();});
+    o.querySelectorAll('[data-vf]').forEach(x=>x.onchange=async()=>{
+      const bl=x.files[0]?await resize(x.files[0]):null;
+      if(bl){const v=V[+x.dataset.vf];v.file=bl;v.url=URL.createObjectURL(bl);draw();}
+    });
   };
-  o.querySelector('#addv').onclick=()=>{V.push({name:'',price:''});draw();};
+  o.querySelector('#addv').onclick=()=>{V.push({name:'',price:'',img:'',file:null,url:''});draw();};
   draw();
   return V;
 }
@@ -316,7 +322,7 @@ function editForm(it){
     if(vs.some(v=>v.price===''||isNaN(parseFloat(v.price))||parseFloat(v.price)<0)){alert('Fiecare variantă are nevoie de nume și preț.');return;}
     if(!t||(!vs.length&&p==='')){alert('Trebuie un titlu și un preț.');return;}
     if(keep.length+P.blobs.length>6){alert('Maxim 6 poze.');return;}
-    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p||'0');fd.append('variants',JSON.stringify(vs.map(v=>({id:v.id,name:String(v.name).trim(),price:parseFloat(v.price)}))));fd.append('keep',JSON.stringify(keep));
+    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p||'0');fd.append('variants',JSON.stringify(vs.map(v=>({id:v.id,name:String(v.name).trim(),price:parseFloat(v.price),img:v.file?'':v.img}))));const vi=[];vs.forEach((v,i)=>{if(v.file){fd.append('vimgs',v.file,'v'+i+'.jpg');vi.push(i);}});fd.append('vimgIdx',JSON.stringify(vi));fd.append('keep',JSON.stringify(keep));
     P.blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
     e.target.disabled=true;e.target.textContent='Se trimite…';
     try{await api('/api/items/'+it.id,{method:'PUT',body:fd});o.remove();refresh();}
@@ -335,7 +341,7 @@ function addForm(){
     const vs=V.filter(v=>String(v.name).trim());
     if(vs.some(v=>v.price===''||isNaN(parseFloat(v.price))||parseFloat(v.price)<0)){alert('Fiecare variantă are nevoie de nume și preț.');return;}
     if(!t||(!vs.length&&p==='')){alert('Trebuie un titlu și un preț.');return;}
-    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p||'0');fd.append('variants',JSON.stringify(vs.map(v=>({id:v.id,name:String(v.name).trim(),price:parseFloat(v.price)}))));
+    const fd=new FormData();fd.append('title',t);fd.append('desc',o.querySelector('#d').value);fd.append('price',p||'0');fd.append('variants',JSON.stringify(vs.map(v=>({id:v.id,name:String(v.name).trim(),price:parseFloat(v.price),img:v.file?'':v.img}))));const vi=[];vs.forEach((v,i)=>{if(v.file){fd.append('vimgs',v.file,'v'+i+'.jpg');vi.push(i);}});fd.append('vimgIdx',JSON.stringify(vi));
     P.blobs.forEach((b,i)=>fd.append('images',b,'p'+i+'.jpg'));
     e.target.disabled=true;e.target.textContent='Se trimite…';
     try{await api('/api/items',{method:'POST',body:fd});o.remove();refresh();}
