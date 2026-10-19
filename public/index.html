@@ -234,7 +234,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc ca ai cumparat de la noi! Sa il porti sanatoasa!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(i=>i.title).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem schimbul. Mulțumesc mult ca ai cumparat de la noi! Sa-l porti sanatoasa!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -288,11 +288,12 @@ const VAR_UI='<label>Variante (opțional) : fiecare cu prețul ei</label><div id
 function variantsEditor(o,init){
   const V=(init||[]).map(v=>({id:v.id,name:v.name,price:v.price,img:v.img||'',file:null,url:v.img||''}));
   const draw=()=>{
-    o.querySelector('#vars').innerHTML=V.map((v,i)=>'<div class="vr"><div class="vp">'+(v.url?'<img src="'+esc(v.url)+'">':'')+'<button type="button" data-vc="'+i+'">'+(v.url?'🔄':'📷')+'</button>'+(v.url?'<button type="button" data-vd="'+i+'">🗑</button>':'')+'<input type="file" accept="image/*" hidden data-vf="'+i+'"></div><input data-vn="'+i+'" placeholder="Nume (ex. albastră)" value="'+esc(v.name)+'"><input data-vp="'+i+'" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Preț" value="'+esc(v.price)+'"><button type="button" data-vx="'+i+'">✕</button></div>').join('');
+    o.querySelector('#vars').innerHTML=V.map((v,i)=>'<div class="vr"><div class="vp">'+(v.url?'<img src="'+esc(v.url)+'">':'')+'<button type="button" data-vc="'+i+'" title="Fă o poză">📷</button><button type="button" data-vg="'+i+'" title="Alege din galerie">🖼</button>'+(v.url?'<button type="button" data-vd="'+i+'">🗑</button>':'')+'<input type="file" accept="image/*" capture="environment" hidden data-vf="'+i+'"><input type="file" accept="image/*" hidden data-vf="'+i+'"></div><input data-vn="'+i+'" placeholder="Nume (ex. albastră)" value="'+esc(v.name)+'"><input data-vp="'+i+'" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Preț" value="'+esc(v.price)+'"><button type="button" data-vx="'+i+'">✕</button></div>').join('');
     o.querySelectorAll('[data-vn]').forEach(x=>x.oninput=()=>{V[+x.dataset.vn].name=x.value;});
     o.querySelectorAll('[data-vp]').forEach(x=>x.oninput=()=>{V[+x.dataset.vp].price=x.value;});
     o.querySelectorAll('[data-vx]').forEach(x=>x.onclick=()=>{V.splice(+x.dataset.vx,1);draw();});
-    o.querySelectorAll('[data-vc]').forEach(x=>x.onclick=()=>o.querySelector('[data-vf="'+x.dataset.vc+'"]').click());
+    o.querySelectorAll('[data-vc]').forEach(x=>x.onclick=()=>o.querySelector('[data-vf="'+x.dataset.vc+'"][capture]').click());
+    o.querySelectorAll('[data-vg]').forEach(x=>x.onclick=()=>o.querySelector('[data-vf="'+x.dataset.vg+'"]:not([capture])').click());
     o.querySelectorAll('[data-vd]').forEach(x=>x.onclick=()=>{const v=V[+x.dataset.vd];v.file=null;v.url='';v.img='';draw();});
     o.querySelectorAll('[data-vf]').forEach(x=>x.onchange=async()=>{
       const bl=x.files[0]?await resize(x.files[0]):null;
