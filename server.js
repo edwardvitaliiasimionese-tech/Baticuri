@@ -14,7 +14,7 @@ const DEFAULT = () => ({ settings: { shop: 'Magazinul meu', holder: '', iban: ''
 
 async function load() {
   const r = await fetch(`${OBJ}/${BUCKET}/db.json?t=${Date.now()}`, { headers: H() });
-  if (r.ok) { const d = await r.json(); d.orders = d.orders || []; return d; }
+  if (r.ok) { const d = await r.json(); d.orders = d.orders || []; d.categories = d.categories || []; return d; }
   if (r.status === 400 || r.status === 404) return DEFAULT();   // fichier pas encore créé
   throw new Error('Citire imposibilă (' + r.status + ')');
 }
@@ -70,6 +70,7 @@ const resolve = (d, key) => {
   return { title: it.title, price: it.price, sold: !!it.sold, left: leftOf(d, key, it) };
 };
 const hex = c => /^#[0-9a-f]{6}$/i.test(String(c || '')) ? String(c) : '';
+const catOk = (d, c, sb) => { const cat = (d.categories || []).find(x => x.id === String(c || '')); return cat ? { cat: cat.id, sub: (cat.subs || []).some(x => x.id === String(sb || '')) ? String(sb) : undefined } : {}; };
 const qn = x => Math.max(1, Math.min(999, parseInt(x) || 1));
 const parseVariants = (raw, old) => {
   let a; try { a = JSON.parse(raw || '[]'); } catch (e) { a = []; }
@@ -98,7 +99,7 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa }, items: d.items.map(it => view(d, it)) }); }));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa }, items: d.items.map(it => view(d, it)), categories: d.categories || [] }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
@@ -125,7 +126,7 @@ app.post('/api/items', needAdmin, vfields, wrap(async (req, res) => {
   for (const f of (req.files && req.files.images) || []) imgs.push(await putImage(f));
   await applyVariantImages(req, variants);
   const d = await load();
-  const item = { id: crypto.randomBytes(6).toString('hex'), title, desc: String(req.body.desc || '').trim().slice(0, 2000), price, imgs, color: hex(req.body.color), qty: qn(req.body.qty), variants: variants.length ? variants : undefined };
+  const item = { id: crypto.randomBytes(6).toString('hex'), title, desc: String(req.body.desc || '').trim().slice(0, 2000), price, imgs, ...catOk(d, req.body.cat, req.body.sub), color: hex(req.body.color), qty: qn(req.body.qty), variants: variants.length ? variants : undefined };
   d.items.unshift(item); await save(d); res.json(item);
 }));
 
@@ -145,11 +146,30 @@ app.put('/api/items/:id', needAdmin, vfields, wrap(async (req, res) => {
   const oldVImgs = (it.variants || []).map(v => v.img).filter(Boolean);
   await applyVariantImages(req, variants);
   const removed = it.imgs.filter(u => !keep.includes(u));
-  it.title = title; it.desc = String(req.body.desc || '').trim().slice(0, 2000); it.price = price; it.color = hex(req.body.color); it.qty = qn(req.body.qty); it.variants = variants.length ? variants : undefined; sync(d);
+  it.title = title; it.desc = String(req.body.desc || '').trim().slice(0, 2000); it.price = price; delete it.cat; delete it.sub; Object.assign(it, catOk(d, req.body.cat, req.body.sub)); it.color = hex(req.body.color); it.qty = qn(req.body.qty); it.variants = variants.length ? variants : undefined; sync(d);
   it.imgs = [...keep, ...added].slice(0, 6);
   await save(d); removed.forEach(delImage);
   const keepV = new Set(variants.map(v => v.img)); oldVImgs.filter(u => !keepV.has(u)).forEach(delImage);
   res.json(it);
+}));
+
+app.put('/api/categories', needAdmin, wrap(async (req, res) => {
+  const d = await load(), raw = Array.isArray(req.body.categories) ? req.body.categories : [];
+  const nm = v => String(v || '').trim().slice(0, 40);
+  const nid = v => /^[a-f0-9]{1,16}$/.test(String(v || '')) ? String(v) : crypto.randomBytes(4).toString('hex');
+  const cats = [];
+  for (const c of raw.slice(0, 50)) {
+    const name = nm(c.name); if (!name) continue;
+    const subs = [];
+    for (const x of (Array.isArray(c.subs) ? c.subs : []).slice(0, 50)) { const sn = nm(x.name); if (sn) subs.push({ id: nid(x.id), name: sn }); }
+    cats.push({ id: nid(c.id), name, subs });
+  }
+  d.categories = cats;
+  d.items.forEach(it => {
+    const c = cats.find(x => x.id === it.cat);
+    if (!c) { delete it.cat; delete it.sub; } else if (it.sub && !c.subs.some(x => x.id === it.sub)) delete it.sub;
+  });
+  await save(d); res.json(cats);
 }));
 
 app.delete('/api/items/:id', needAdmin, wrap(async (req, res) => {
