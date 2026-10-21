@@ -72,6 +72,7 @@ button:disabled{opacity:.6;cursor:default}
 .vc{display:flex;gap:4px;align-items:center}.vc input[type=color]{width:34px;height:34px;padding:0;border:none;background:none;cursor:pointer}
 .vc{flex-wrap:wrap}.vc.open{flex-basis:100%}.cp{flex-basis:100%;width:100%}.pal{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.pal button{width:26px;height:26px;border-radius:50%;padding:0;border:1px solid rgba(0,0,0,.35)}
 .qs{display:inline-flex;align-items:center;gap:6px}.qs button{padding:0;width:26px;height:26px;border-radius:50%;line-height:1;font-size:1rem}.qs b{min-width:1.3em;text-align:center}.body .qs{display:flex;justify-content:center}.ln .t.c{display:block;overflow:visible}.tt{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.nd{color:#b91c1c;font-weight:700}.card .nd.top{background:#fee2e2;text-align:center;padding:5px 4px;font-size:.72rem;line-height:1.2}.dlg .nd{font-size:.9rem;margin-bottom:6px}.ln .nd{display:block;font-size:.72rem;margin-bottom:2px}.box .nd{margin-bottom:4px}
 </style>
 </head>
 <body>
@@ -95,7 +96,7 @@ async function api(url,opt){
 }
 async function refresh(){
   S=await api('/api/shop');admin=(await api('/api/me')).admin;S.orders=admin?await api('/api/orders'):[];
-  const cnt={};cart=cart.filter(k=>{const u=unit(k);if(!u||u.sold)return false;cnt[k]=(cnt[k]||0)+1;return cnt[k]<=u.left;});saveCart();
+  const cnt={};cart=cart.filter(k=>{const u=unit(k);if(!u||u.sold||!(u.left>0))return true;cnt[k]=(cnt[k]||0)+1;return cnt[k]<=u.left;});saveCart();
   document.title=S.settings.shop;render();
 }
 function modal(html,lock){
@@ -112,11 +113,11 @@ function resize(file){return new Promise(res=>{
 function render(){
   const st=S.settings;
   $('#root').innerHTML=
-   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Coș'+(cart.length?' ('+cart.length+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>'+
+   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Coș'+(cartCount()?' ('+cartCount()+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>'+
    '<div class="shop"><main>'+(S.items.length?S.items.map(it=>
-    '<div class="card'+(it.sold||it.reserved?' sold':'')+'">'+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
+    '<div class="card'+(it.sold||it.reserved?' sold':'')+'">'+(it.sold||it.reserved?'<div class="nd top">Articolul nu mai este disponibil</div>':(it.variants&&it.variants.some(v=>v.sold||v.reserved)?'<div class="nd top">Unele variante nu mai sunt disponibile</div>':''))+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
     '<div class="body"><h2 data-open="'+esc(it.id)+'">'+sw(it.color)+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+(it.variants&&it.variants.length?'de la ':'')+eur(it.price)+'</div>'+
-    (it.sold?'<button disabled>Vândut</button>':it.reserved?'<div class="nd">Articolul nu este disponibil momentan</div><button disabled>Indisponibil</button>':(it.variants&&it.variants.length)?'<button class="pri" data-open="'+esc(it.id)+'">Alege</button>':(qOf(it.id)?stepper(it.id):'<button class="pri" data-cart="'+esc(it.id)+'">＋ Coș</button>'))+
+    (it.sold?'<button disabled>Vândut</button>':it.reserved?'<button disabled>Indisponibil</button>':(it.variants&&it.variants.length)?'<button class="pri" data-open="'+esc(it.id)+'">Alege</button>':(qOf(it.id)?stepper(it.id):'<button class="pri" data-cart="'+esc(it.id)+'">＋ Coș</button>'))+
     (admin?'<button data-edit="'+esc(it.id)+'">Editează</button><button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
     :'<div class="empty">Niciun articol deocamdată.</div>')+'</main>'+sideHtml()+'</div>';
   $('#foot').innerHTML=admin?'':'<a id="login">Zonă vânzător</a>';
@@ -155,10 +156,12 @@ function ordersAside(){
 }
 
 function sideHtml(){
-  const L=cartLines(),total=L.reduce((t,i)=>t+i.price*i.q,0);
+  const L=cartLines(),good=L.filter(i=>!i.bad),total=good.reduce((t,i)=>t+i.price*i.q,0);
   return '<div class="side"><aside><h3>🛒 Coșul meu</h3>'+(L.length?
-    L.map(i=>'<div class="ln"><span class="t c"><span class="tt">'+esc(i.title)+'</span>'+stepper(i.id)+'</span><span class="p">'+eur(i.price*i.q)+'</span><button data-x="'+esc(i.id)+'" aria-label="Elimină">✕</button></div>').join('')+
-    '<div class="tot"><span>Total</span><b>'+eur(total)+'</b></div><button class="pri" id="side-go">Comandă</button>'
+    L.map(i=>i.bad?
+      '<div class="ln"><span class="t c"><span class="nd">'+(i.gone?'Articolul nu mai există':'Articolul nu mai este disponibil')+'</span><span class="tt">'+esc(i.title)+'</span></span><button data-x="'+esc(i.id)+'" aria-label="Elimină">✕</button></div>':
+      '<div class="ln"><span class="t c"><span class="tt">'+esc(i.title)+'</span>'+stepper(i.id)+'</span><span class="p">'+eur(i.price*i.q)+'</span><button data-x="'+esc(i.id)+'" aria-label="Elimină">✕</button></div>').join('')+
+    (good.length?'<div class="tot"><span>Total</span><b>'+eur(total)+'</b></div><button class="pri" id="side-go">Comandă</button>':'')
     :'<p class="note">Gol deocamdată.</p>')+'</aside>'+ordersAside()+'</div>';
 }
 
@@ -171,7 +174,8 @@ function zoom(src){
 const qOf=k=>cart.filter(x=>x===k).length;
 const addOne=k=>{const u=unit(k);if(u&&!u.sold&&qOf(k)<u.left){cart.push(k);saveCart();}};
 const subOne=k=>{const i=cart.indexOf(k);if(i>=0){cart.splice(i,1);saveCart();}};
-function cartLines(){const m=new Map();cart.forEach(k=>m.set(k,(m.get(k)||0)+1));return [...m].map(([k,q])=>{const u=unit(k);return u?{...u,q}:null;}).filter(Boolean);}
+function cartLines(){const m=new Map();cart.forEach(k=>m.set(k,(m.get(k)||0)+1));return [...m].map(([k,q])=>{const u=unit(k);if(!u)return {id:k,title:'Articol șters',price:0,q,bad:true,gone:true};return {...u,q,bad:!!(u.sold||!(u.left>0))};});}
+const cartCount=()=>cartLines().filter(i=>!i.bad).reduce((t,i)=>t+i.q,0);
 function stepper(k){const u=unit(k),q=qOf(k);return '<span class="qs"><button type="button" data-qm="'+esc(k)+'">−</button><b>'+q+'</b><button type="button" data-qp="'+esc(k)+'"'+(u&&q>=u.left?' disabled':'')+'>+</button></span>';}
 function bindQty(root,after){
   root.querySelectorAll('[data-qm]').forEach(b=>b.onclick=()=>{subOne(b.dataset.qm);after();});
@@ -201,10 +205,10 @@ function openItem(it){
   const btn=(key,sold,res)=>sold?'<button disabled>Vândut</button>':res?'<button disabled>Indisponibil</button>':(qOf(key)?stepper(key):'<button class="pri" data-tg="'+esc(key)+'">Adaugă în coș</button>');
   const draw=()=>{
     const V=it.variants||[];
-    o.querySelector('.dlg').innerHTML=(it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+
+    o.querySelector('.dlg').innerHTML=(!V.length&&(it.sold||it.reserved)?'<p class="nd">Articolul nu mai este disponibil</p>':'')+(it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+
       '<h3>'+sw(it.color)+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p>'+
-      (V.length?V.map(v=>'<div class="box" style="display:flex;gap:10px;align-items:flex-start">'+(v.img?'<img class="vimg" src="'+esc(v.img)+'" alt="">':'')+'<div style="flex:1"><b>'+sw(v.color)+esc(v.name)+'</b><small>'+eur(v.price)+(v.reserved&&!v.sold?' · Articolul nu este disponibil momentan':'')+(v.qty>1&&!v.sold&&!v.reserved?' · disponibile: '+v.left:'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div></div>').join('')
-       :(it.reserved&&!it.sold?'<p class="nd">Articolul nu este disponibil momentan</p>':'')+''+(it.qty>1&&!it.sold&&!it.reserved?'<p class="note">Disponibile: '+it.left+' buc.</p>':'')+'<div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+btn(it.id,it.sold,it.reserved)+'</div>')+
+      (V.length?V.map(v=>'<div class="box" style="display:flex;gap:10px;align-items:flex-start">'+(v.img?'<img class="vimg" src="'+esc(v.img)+'" alt="">':'')+'<div style="flex:1">'+((v.sold||v.reserved)?'<div class="nd">Varianta nu mai este disponibilă</div>':'')+'<b>'+sw(v.color)+esc(v.name)+'</b><small>'+eur(v.price)+(v.qty>1&&!v.sold&&!v.reserved?' · disponibile: '+v.left:'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div></div>').join('')
+       :''+(it.qty>1&&!it.sold&&!it.reserved?'<p class="note">Disponibile: '+it.left+' buc.</p>':'')+'<div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+btn(it.id,it.sold,it.reserved)+'</div>')+
       '<div class="row"><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
     o.querySelectorAll('.gal img,.vimg').forEach(im=>im.onclick=()=>zoom(im.src));
@@ -218,12 +222,16 @@ function cartView(){
   const o=modal('');
   const draw=()=>{
     const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'';
-    const L=cartLines(),total=L.reduce((t,i)=>t+i.price*i.q,0);
+    const L=cartLines(),good=L.filter(i=>!i.bad),total=good.reduce((t,i)=>t+i.price*i.q,0);
     o.querySelector('.dlg').innerHTML='<h3>Coșul meu</h3>'+(L.length?
-      L.map(i=>'<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+' × '+i.q+' = '+eur(i.price*i.q)+'</small><div style="display:flex;gap:10px;align-items:center;margin-top:8px">'+stepper(i.id)+'<button class="dng" data-rm="'+esc(i.id)+'">Elimină</button></div></div>').join('')+
-      '<div class="box"><small>Total de plată</small><b>'+eur(total)+'</b></div>'+
-      '<label>Numele tău</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" placeholder="+40 712 345 678" value="'+esc(p0)+'">'+
-      '<div class="row"><button id="cl">Continuă cumpărăturile</button><button class="pri" id="ok">Comandă</button></div>'
+      L.map(i=>i.bad?
+        '<div class="box"><div class="nd">'+(i.gone?'Articolul nu mai există':'Articolul nu mai este disponibil')+'</div><b>'+esc(i.title)+'</b><div style="margin-top:8px"><button class="dng" data-rm="'+esc(i.id)+'">Elimină</button></div></div>':
+        '<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+' × '+i.q+' = '+eur(i.price*i.q)+'</small><div style="display:flex;gap:10px;align-items:center;margin-top:8px">'+stepper(i.id)+'<button class="dng" data-rm="'+esc(i.id)+'">Elimină</button></div></div>').join('')+
+      (good.length?
+        '<div class="box"><small>Total de plată</small><b>'+eur(total)+'</b></div>'+
+        '<label>Numele tău</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" placeholder="+40 712 345 678" value="'+esc(p0)+'">'+
+        '<div class="row"><button id="cl">Continuă cumpărăturile</button><button class="pri" id="ok">Comandă</button></div>'
+        :'<div class="row"><button id="cl">Închide</button></div>')
       :'<p class="note">Coșul tău este gol.</p><div class="row"><button id="cl">Închide</button></div>');
     o.querySelector('#cl').onclick=()=>o.remove();
     o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>x!==b.dataset.rm);saveCart();render();draw();});
@@ -232,10 +240,11 @@ function cartView(){
     if(ok)ok.onclick=async()=>{
       const name=o.querySelector('#n').value.trim(),phone=o.querySelector('#ph').value.trim();
       if(!name||!/^(\+|00)\d[\d\s.-]{7,}$/.test(phone)){alert('Trebuie numele tău și numărul de WhatsApp cu prefixul țării, de exemplu +40 712 345 678.');return;}
+      const ids=cart.filter(k=>good.some(g=>g.id===k));
       ok.disabled=true;ok.textContent='Se trimite…';
       try{
-        await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:cart,name,phone})});
-        cart=[];saveCart();o.remove();refresh();pay(L,total,name,phone);
+        await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone})});
+        const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();refresh();pay(good,total,name,phone);
       }catch(x){alert(x.message);await refresh();draw();}
     };
   };
@@ -273,7 +282,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(lno).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne intalnim facem schimbul. Mulțumesc mult ca ai cumparat de la noi! Sa-l porti sanatoasa';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(lno).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne intalnim facem scimbul. Mulțumesc!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
