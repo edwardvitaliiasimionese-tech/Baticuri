@@ -90,6 +90,16 @@ body{font-size:17px;letter-spacing:0}
 h1,h2,h3,.price{font-family:var(--hand);font-weight:700;letter-spacing:0}
 h1{font-size:1.9rem}
 h3{font-size:1.25rem}
+/* cartes plus petites */
+main{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
+.gal img,.nopic{aspect-ratio:5/4}
+.body{padding:5px;gap:3px}
+.body h2{font-size:.72rem}
+.price{font-size:.8rem}
+.body button{padding:4px 3px;font-size:.7rem}
+.card .nd.top{font-size:.62rem;padding:3px 2px}
+.body .qs button{width:22px;height:22px}
+@media(min-width:700px){main{grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:10px}.body h2{font-size:.85rem}.price{font-size:.95rem}.body button{font-size:.78rem;padding:5px}}
 </style>
 </head>
 <body>
@@ -373,7 +383,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(lno).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne intalnim facem schimbul. Mulțumesc mult ca ai cumparat de la noi! Sa-l porti sanatoasa!';
+  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(lno).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne intalnim facem scimbul. Mulțumesc mult ca ai cumparat de la noi! Sa-l porti sanatoasa!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
