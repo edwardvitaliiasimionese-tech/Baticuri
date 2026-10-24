@@ -100,6 +100,7 @@ main{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
 .card .nd.top{font-size:.62rem;padding:3px 2px}
 .body .qs button{width:22px;height:22px}
 @media(min-width:700px){main{grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:10px}.body h2{font-size:.85rem}.price{font-size:.95rem}.body button{font-size:.78rem;padding:5px}}
+.srt{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}.srt select{flex:1;min-width:140px}.srt .chip{margin:0}
 </style>
 </head>
 <body>
@@ -111,7 +112,7 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const CUR='EUR'; // schimbă în 'RON' pentru lei
 const eur=n=>new Intl.NumberFormat('ro-RO',{style:'currency',currency:CUR}).format(n);
 let S={settings:{},items:[],orders:[],categories:[]},admin=false,cart=[];
-let q='',fcat='',fsub='',sopen=false;
+let q='',fcat='',fsub='',sopen=false,sortk='new',oa=false;
 try{cart=JSON.parse(localStorage.getItem('cart')||'[]');}catch(e){}
 const saveCart=()=>{try{localStorage.setItem('cart',JSON.stringify(cart));}catch(e){}};
 const lno=i=>i.title+(i.qty>1?' ×'+i.qty:'');
@@ -141,17 +142,18 @@ function resize(file){return new Promise(res=>{
 function render(){
   const st=S.settings;
   $('#top').innerHTML=
-   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button class="pri" id="cartb">🛒 Coș'+(cartCount()?' ('+cartCount()+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="cats">Categorii</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>';
+   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar">'+(myOrders().length?'<button id="mine">Comenzile mele</button>':'')+'<button class="pri" id="cartb">🛒 Coș'+(cartCount()?' ('+cartCount()+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="cats">Categorii</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>';
   $('#rest').innerHTML='<div class="shop"><main>'+(shown().length?shown().map(it=>
-    '<div class="card'+(it.sold||it.reserved?' sold':'')+'">'+(it.sold||it.reserved?'<div class="nd top">Articolul nu mai este disponibil</div>':(it.variants&&it.variants.some(v=>v.sold||v.reserved)?'<div class="nd top">Unele variante nu mai sunt disponibile</div>':''))+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
+    '<div class="card'+(it.sold||it.reserved?' sold':'')+'">'+(it.hidden?'<div class="nd top">Ascuns – doar tu îl vezi</div>':'')+(it.sold||it.reserved?'<div class="nd top">Articolul nu mai este disponibil</div>':(it.variants&&it.variants.some(v=>v.sold||v.reserved)?'<div class="nd top">Unele variante nu mai sunt disponibile</div>':''))+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
     '<div class="body"><h2 data-open="'+esc(it.id)+'">'+sw(it.color)+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+(it.variants&&it.variants.length?'de la ':'')+eur(it.price)+'</div>'+
     (it.sold?'<button disabled>Vândut</button>':it.reserved?'<button disabled>Indisponibil</button>':(it.variants&&it.variants.length)?'<button class="pri" data-open="'+esc(it.id)+'">Alege</button>':(qOf(it.id)?stepper(it.id):'<button class="pri" data-cart="'+esc(it.id)+'">＋ Coș</button>'))+
-    (admin?'<button data-edit="'+esc(it.id)+'">Editează</button><button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
+    (admin?'<button data-edit="'+esc(it.id)+'">Editează</button><button data-hide="'+esc(it.id)+'">'+(it.hidden?'Arată':'Ascunde')+'</button><button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
     :'<div class="empty">'+(q||fcat?'Niciun rezultat.':'Niciun articol deocamdată.')+'</div>')+'</main>'+sideHtml()+'</div>';
   $('#foot').innerHTML=admin?'':'<a id="login">Zonă vânzător</a>';
   if($('#login'))$('#login').onclick=loginForm;
   if(admin){
     $('#add').onclick=addForm;$('#ord').onclick=ordersView;
+    document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=async()=>{const it=S.items.find(x=>x.id===b.dataset.hide);try{await api('/api/items/'+it.id+'/hidden',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({hidden:!it.hidden})});refresh();}catch(e){alert(e.message);}});
     document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editForm(S.items.find(x=>x.id===b.dataset.edit)));$('#set').onclick=settings;$('#cats').onclick=catsEditor;
     $('#out').onclick=async()=>{await api('/api/logout',{method:'POST'});refresh();};
     document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
@@ -159,6 +161,7 @@ function render(){
       try{await api('/api/items/'+b.dataset.del,{method:'DELETE'});refresh();}catch(e){alert(e.message);}});
   }
   $('#cartb').onclick=cartView;
+  if($('#mine'))$('#mine').onclick=()=>trackView(myOrders());
   document.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>x!==b.dataset.x);saveCart();render();});
   if($('#side-go'))$('#side-go').onclick=cartView;
   if($('#side-ord'))$('#side-ord').onclick=ordersView;
@@ -195,13 +198,18 @@ function sideHtml(){
 
 const norm=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 function shown(){
+  const L=shown0().filter(it=>!oa||(!it.sold&&!it.reserved));
+  return sortk==='asc'?[...L].sort((a,b)=>a.price-b.price):sortk==='desc'?[...L].sort((a,b)=>b.price-a.price):L;
+}
+function shown0(){
   const nq=norm(q.trim());
   return S.items.filter(it=>(!fcat||it.cat===fcat)&&(!fsub||it.sub===fsub)&&(!nq||norm(it.title+' '+(it.desc||'')+' '+(it.variants||[]).map(v=>v.name).join(' ')).includes(nq)));
 }
 
 function initSearch(){
-  $('#root').innerHTML='<div id="top"></div><div id="sbar"><div class="sb"><input id="q" type="search" placeholder="🔍 Caută articole sau alege o categorie…" autocomplete="off"><div id="sp"></div></div></div><div id="rest"></div>';
+  $('#root').innerHTML='<div id="top"></div><div id="sbar"><div class="sb"><input id="q" type="search" placeholder="🔍 Caută articole sau alege o categorie…" autocomplete="off"><div id="sp"></div><div class="srt"><select id="sk"><option value="new">Cele mai noi</option><option value="asc">Preț crescător</option><option value="desc">Preț descrescător</option></select><label class="chip"><input type="checkbox" id="oa" style="width:auto"> Doar disponibile</label></div></div></div><div id="rest"></div>';
   const inp=$('#q');
+  $('#sk').onchange=e=>{sortk=e.target.value;render();};$('#oa').onchange=e=>{oa=e.target.checked;render();};
   inp.onfocus=()=>{sopen=true;renderSearch();};
   inp.oninput=()=>{q=inp.value;render();renderSearch();};
   document.addEventListener('click',e=>{if(sopen&&!e.target.closest('.sb')){sopen=false;renderSearch();}});
@@ -310,13 +318,24 @@ function openItem(it){
       '<h3>'+sw(it.color)+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p>'+
       (V.length?V.map(v=>'<div class="box" style="display:flex;gap:10px;align-items:flex-start">'+(v.img?'<img class="vimg" src="'+esc(v.img)+'" alt="">':'')+'<div style="flex:1">'+((v.sold||v.reserved)?'<div class="nd">Varianta nu mai este disponibilă</div>':'')+'<b>'+sw(v.color)+esc(v.name)+'</b><small>'+eur(v.price)+(v.qty>1&&!v.sold&&!v.reserved?' · disponibile: '+v.left:'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div></div>').join('')
        :''+(it.qty>1&&!it.sold&&!it.reserved?'<p class="note">Disponibile: '+it.left+' buc.</p>':'')+'<div class="price" style="font-size:1.3rem">'+eur(it.price)+'</div><div class="row">'+btn(it.id,it.sold,it.reserved)+'</div>')+
-      '<div class="row"><button id="cl">Închide</button></div>';
+      '<div class="row"><button id="sh">Partajează</button><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
+    o.querySelector('#sh').onclick=()=>{const u=location.origin+'/?a='+it.id;if(navigator.share)navigator.share({title:it.title,url:u}).catch(()=>{});else window.open('https://wa.me/?text='+encodeURIComponent(it.title+' '+u),'_blank');};
     o.querySelectorAll('.gal img,.vimg').forEach(im=>im.onclick=()=>zoom(im.src));
     o.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{addOne(b.dataset.tg);render();draw();});
     bindQty(o,()=>{render();draw();});
   };
   draw();
+}
+
+const myOrders=()=>{try{return JSON.parse(localStorage.getItem('myorders')||'[]');}catch(e){return [];}};
+async function trackView(ids){
+  const o=modal('<h3>Comenzile mele</h3><p class="note">Se încarcă…</p>');
+  const ST={new:'Nouă',confirmed:'Confirmată',delivered:'Predată'};
+  let h='';
+  for(const id of ids){try{const r=await api('/api/orders/'+encodeURIComponent(id)+'/track');h+='<div class="box"><b>'+esc(r.items.map(i=>i.title+(i.qty>1?' ×'+i.qty:'')).join(', '))+'</b><small>Total: '+eur(r.total)+' · '+(r.paid?'Plătită':'Neplătită')+'</small><div style="margin-top:6px">Stare: <b>'+(ST[r.status]||'Nouă')+'</b></div></div>';}catch(e){}}
+  o.querySelector('.dlg').innerHTML='<h3>Comenzile mele</h3>'+(h||'<p class="note">Nicio comandă găsită.</p>')+'<div class="row"><button id="cl">Închide</button></div>';
+  o.querySelector('#cl').onclick=()=>o.remove();
 }
 
 function cartView(){
@@ -344,7 +363,8 @@ function cartView(){
       const ids=cart.filter(k=>good.some(g=>g.id===k));
       ok.disabled=true;ok.textContent='Se trimite…';
       try{
-        await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone})});
+        const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone})});
+        try{const m=myOrders();m.unshift(r.id);localStorage.setItem('myorders',JSON.stringify(m.slice(0,20)));}catch(e){}
         const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();refresh();pay(good,total,name,phone);
       }catch(x){alert(x.message);await refresh();draw();}
     };
@@ -359,7 +379,7 @@ function pay(L,total,name,phone){
    (wa?'<div class="box"><b>⚠️ Ultimul pas: anunță vânzătorul pe WhatsApp</b><small style="margin-top:6px">Este obligatoriu pentru ca vânzătorul să-ți confirme comanda. Apasă butonul de mai jos și trimite mesajul.</small></div>':'')+
    '<div class="box"><b>💵 Plata, de preferat în numerar (cash)</b><small style="margin-top:6px">Vânzătorul te va contacta pentru a vă înțelege.</small></div>'+
    '<div class="box"><b>📲 Altfel, vei primi numărul de cont (IBAN) în privat pe WhatsApp</b><small style="margin-top:6px">Vânzătorul îți scrie pe numărul indicat de tine ('+esc(phone)+').</small></div>'+
-   '<p class="note">Dacă plătești prin transfer bancar, fă-o doar după ce ai primit mesajul lui. Comanda ta este confirmată imediat ce plata a fost primită.</p>'+
+   '<p class="note">Dacă plătești prin transfer bancar, fă-o doar după ce ai primit mesajul lui. Comanda ta este confirmată imediat ce plata a fost primită.</p><p class="note">Poți urmări starea comenzii cu butonul „Comenzile mele”.</p>'+
    '<div class="row">'+(wa?'<a class="btn pri" id="wa" target="_blank" rel="noopener" href="'+esc(wa)+'">Anunță vânzătorul pe WhatsApp</a>':'')+'<button id="cl"'+(wa?' disabled':'')+'>Închide</button></div>',!!wa);
   if(wa)o.querySelector('#wa').onclick=()=>{o.querySelector('#cl').disabled=false;};
   o.querySelector('#cl').onclick=()=>o.remove();
@@ -383,7 +403,7 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Pace '+x.name+', am primit comanda ta ('+oi(x).map(lno).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne intalnim facem scimbul. Mulțumesc mult ca ai cumparat de la noi! Sa-l porti sanatoasa!';
+  const txt='Bună '+x.name+', am primit comanda ta ('+oi(x).map(lno).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem târgul. Mulțumesc!';
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
@@ -399,11 +419,13 @@ function ordersView(){
     const L=S.orders;
     o.querySelector('.dlg').innerHTML='<h3>Comenzi</h3>'+(L.length?L.map(x=>
      '<div class="box"><b>'+esc(oi(x).map(lno).join(', '))+' · '+eur(ot(x))+'</b><small>'+esc(x.name)+' · <a style="color:inherit" href="tel:'+esc(x.phone.replace(/[^\d+]/g,''))+'">'+esc(x.phone)+'</a></small><small>'+esc(new Date(x.date).toLocaleString('ro-RO'))+'</small>'+
+     '<div class="row"><select data-st="'+esc(x.id)+'">'+[['new','Nouă'],['confirmed','Confirmată'],['delivered','Predată']].map(([v,t])=>'<option value="'+v+'"'+((x.status||'new')===v?' selected':'')+'>'+t+'</option>').join('')+'</select></div>'+
      '<div class="row"><a class="btn pri" target="_blank" rel="noopener" href="'+esc(waLink(x))+'">💬 Trimite IBAN-ul pe WhatsApp</a></div>'+
      '<div class="row"><a class="btn" target="_blank" rel="noopener" href="'+esc(waNote(x))+'">💬 Mesaj: am luat comanda în considerare</a></div>'+
      '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Plătit</label><button data-pr="'+esc(x.id)+'">🖨️ PDF</button><button class="dng" data-rm="'+esc(x.id)+'">Șterge</button></div></div>').join('')
      :'<p class="note">Nicio comandă deocamdată.</p>')+'<div class="row"><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
+    o.querySelectorAll('[data-st]').forEach(sel=>sel.onchange=async()=>{try{await api('/api/orders/'+sel.dataset.st,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:sel.value})});await refresh();draw();}catch(e){alert(e.message);}});
     o.querySelectorAll('[data-pr]').forEach(b=>b.onclick=()=>printOrder(S.orders.find(x=>x.id===b.dataset.pr)));
     o.querySelectorAll('[data-paid]').forEach(c=>c.onchange=async()=>{
       try{await api('/api/orders/'+c.dataset.paid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({paid:c.checked})});await refresh();draw();}catch(e){alert(e.message);}});
@@ -564,7 +586,7 @@ function settings(){
     catch(e){alert(e.message);}};
 }
 initSearch();
-refresh();
+refresh().then(()=>{const P=new URLSearchParams(location.search),a=P.get('a'),c=P.get('comanda');if(a){const it=S.items.find(x=>x.id===a);if(it)openItem(it);}if(c)trackView([c]);});
 </script>
 </body>
 </html>
