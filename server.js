@@ -94,12 +94,26 @@ const applyVariantImages = async (req, variants) => {
   for (let k = 0; k < files.length; k++) { const v = variants[+idx[k]]; if (v) v.img = await putImage(files[k]); }
 };
 
+const notify = text => { const k = process.env.RESEND_API_KEY, to = process.env.NOTIFY_EMAIL; if (k && to) fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + k, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: 'Magazin <onboarding@resend.dev>', to: [to], subject: text.split('\n')[0], text }) }).catch(() => {}); };
+const eh = t => String(t || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const INDEX = require('fs').readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '50kb' }));
+app.get('/', wrap(async (req, res) => {
+  let title = 'Magazin', desc = 'Comandă direct de aici.', img = '';
+  try {
+    const d = await load(); title = d.settings.shop;
+    const it = d.items.find(x => x.id === req.query.a && !x.hidden);
+    if (it) { title = it.title + ' – ' + d.settings.shop; desc = it.price + ' €' + (it.desc ? ' · ' + it.desc.slice(0, 120) : ''); img = it.imgs[0] || (it.variants || []).map(v => v.img).find(Boolean) || ''; }
+    else { const f = d.items.find(x => !x.hidden && x.imgs[0]); img = f ? f.imgs[0] : ''; }
+  } catch (e) {}
+  const tags = '<meta property="og:title" content="' + eh(title) + '"><meta property="og:description" content="' + eh(desc) + '"><meta property="og:type" content="website">' + (img ? '<meta property="og:image" content="' + eh(img) + '">' : '') + '<meta name="twitter:card" content="summary_large_image">';
+  res.type('html').send(INDEX.replace('</head>', tags + '</head>'));
+}));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa }, items: d.items.map(it => view(d, it)), categories: d.categories || [] }); }));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [] }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
@@ -197,8 +211,23 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   }
   if (d.orders.length >= 1000) return res.status(429).json({ error: 'Prea multe comenzi în așteptare' });
   const total = Math.round(items.reduce((t, i) => t + i.price * (i.qty || 1), 0) * 100) / 100;
-  d.orders.unshift({ id: crypto.randomBytes(6).toString('hex'), items, total, name, phone, date: new Date().toISOString(), paid: false });
-  await save(d); res.json({ ok: true, total });
+  const oid = crypto.randomBytes(6).toString('hex');
+  d.orders.unshift({ id: oid, status: 'new', items, total, name, phone, date: new Date().toISOString(), paid: false });
+  await save(d);
+  notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + total + ' €');
+  res.json({ ok: true, total, id: oid });
+}));
+
+app.get('/api/orders/:id/track', limiter(200, 3600e3), wrap(async (req, res) => {
+  const d = await load(), o = d.orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Negăsit' });
+  res.json({ status: o.status || 'new', paid: !!o.paid, total: o.total, items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1 })) });
+}));
+
+app.put('/api/items/:id/hidden', needAdmin, wrap(async (req, res) => {
+  const d = await load(), it = d.items.find(x => x.id === req.params.id);
+  if (!it) return res.status(404).json({ error: 'Negăsit' });
+  it.hidden = !!req.body.hidden; await save(d); res.json({ ok: true });
 }));
 
 app.get('/api/orders', needAdmin, wrap(async (req, res) => res.json((await load()).orders)));
@@ -206,7 +235,7 @@ app.get('/api/orders', needAdmin, wrap(async (req, res) => res.json((await load(
 app.put('/api/orders/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Negăsit' });
-  o.paid = !!req.body.paid; sync(d); await save(d); res.json(o);
+  if (req.body.paid !== undefined) o.paid = !!req.body.paid; if (['new', 'confirmed', 'delivered'].includes(req.body.status)) o.status = req.body.status; sync(d); await save(d); res.json(o);
 }));
 
 app.delete('/api/orders/:id', needAdmin, wrap(async (req, res) => {
