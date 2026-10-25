@@ -108,7 +108,16 @@ const applyVariantImages = async (req, variants) => {
   for (let k = 0; k < files.length; k++) { const v = variants[+idx[k]]; if (v) v.img = await putImage(files[k]); }
 };
 
-const notify = text => { const k = process.env.RESEND_API_KEY, to = process.env.NOTIFY_EMAIL; if (k && to) fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + k, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: 'Magazin <onboarding@resend.dev>', to: [to], subject: text.split('\n')[0], text }) }).catch(() => {}); };
+const notify = async text => {
+  const k = process.env.RESEND_API_KEY, to = process.env.NOTIFY_EMAIL;
+  if (!k || !to) return { ok: false, detail: 'Lipsesc variabilele ' + [!k && 'RESEND_API_KEY', !to && 'NOTIFY_EMAIL'].filter(Boolean).join(' și ') + ' pe Render.' };
+  try {
+    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + k, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: 'Magazin <onboarding@resend.dev>', to: [to], subject: text.split('\n')[0], text }) });
+    const body = await r.text();
+    if (!r.ok) console.error('Resend a refuzat e-mailul:', r.status, body);
+    return { ok: r.ok, detail: r.ok ? 'E-mail trimis către ' + to : 'Resend: ' + r.status + ' ' + body.slice(0, 300) };
+  } catch (e) { console.error('Resend:', e); return { ok: false, detail: String(e.message || e) }; }
+};
 const eh = t => String(t || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const INDEX = require('fs').readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
 const app = express();
@@ -239,7 +248,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
 app.get('/api/orders/:id/track', limiter(200, 3600e3), wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Negăsit' });
-  res.json({ status: o.status || 'new', paid: !!o.paid, total: o.total, items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1 })) });
+  res.json({ status: o.status || 'new', paid: !!o.paid, total: o.total, note: o.note || '', date: o.date, items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1 })) });
 }));
 
 app.put('/api/items/:id/hidden', needAdmin, wrap(async (req, res) => {
@@ -247,6 +256,8 @@ app.put('/api/items/:id/hidden', needAdmin, wrap(async (req, res) => {
   if (!it) return res.status(404).json({ error: 'Negăsit' });
   it.hidden = !!req.body.hidden; await save(d); res.json({ ok: true });
 }));
+
+app.post('/api/test-email', needAdmin, wrap(async (req, res) => res.json(await notify('✅ Test e-mail de la magazin\nDacă primești acest mesaj, alertele de comandă funcționează.'))));
 
 app.get('/api/backup', needAdmin, wrap(async (req, res) => {
   const d = await load();
@@ -269,7 +280,7 @@ app.get('/api/orders', needAdmin, wrap(async (req, res) => res.json((await load(
 app.put('/api/orders/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Negăsit' });
-  if (req.body.paid !== undefined) o.paid = !!req.body.paid; if (['new', 'confirmed', 'delivered'].includes(req.body.status)) o.status = req.body.status; sync(d); await save(d); res.json(o);
+  if (req.body.paid !== undefined) o.paid = !!req.body.paid; if (['new', 'confirmed', 'ready', 'delivered'].includes(req.body.status)) o.status = req.body.status; if (typeof req.body.note === 'string') o.note = req.body.note.slice(0, 300); sync(d); await save(d); res.json(o);
 }));
 
 app.delete('/api/orders/:id', needAdmin, wrap(async (req, res) => {
