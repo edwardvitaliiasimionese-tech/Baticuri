@@ -120,6 +120,8 @@ main{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
 .tl2 .dot2.cur{background:var(--ac);border-color:#ec4899}
 .tl2 .sl{font-size:.72rem;margin-top:8px;opacity:.6;line-height:1.2}
 .tl2 .sl.on{opacity:1;font-weight:700}
+.bubwrap{max-width:1100px;margin:0 auto;padding:0 12px}.bub{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:8px 10px;margin-bottom:10px;cursor:pointer}.bh{display:flex;align-items:center;gap:8px;font-size:.85rem}.bh span{flex:1;color:var(--mut)}.bh button{padding:0 7px;border-radius:50%}
+.tl2.mini{padding:10px 0 2px;border:none;background:none}.tl2.mini .line,.tl2.mini .fill{top:18px;height:3px}.tl2.mini .mv{top:20px;width:26px;height:26px;margin:-13px 0 0 -13px;border-width:2px}.tl2.mini .dot2{width:20px;height:20px;font-size:.6rem;border-width:1px}.tl2.mini .sl{font-size:.6rem;margin-top:4px}
 </style>
 </head>
 <body>
@@ -230,7 +232,7 @@ function shown0(){
 }
 
 function initSearch(){
-  $('#root').innerHTML='<div id="top"></div><div id="sbar"><div class="sb"><input id="q" type="search" placeholder="🔍 Caută articole sau alege o categorie…" autocomplete="off"><div id="sp"></div><div class="srt"><select id="sk"><option value="new">Cele mai noi</option><option value="asc">Preț crescător</option><option value="desc">Preț descrescător</option></select><label class="chip"><input type="checkbox" id="oa" style="width:auto"> Doar disponibile</label></div></div></div><div id="rest"></div>';
+  $('#root').innerHTML='<div id="top"></div><div id="mybub" class="bubwrap"></div><div id="sbar"><div class="sb"><input id="q" type="search" placeholder="🔍 Caută articole sau alege o categorie…" autocomplete="off"><div id="sp"></div><div class="srt"><select id="sk"><option value="new">Cele mai noi</option><option value="asc">Preț crescător</option><option value="desc">Preț descrescător</option></select><label class="chip"><input type="checkbox" id="oa" style="width:auto"> Doar disponibile</label></div></div></div><div id="rest"></div>';
   const inp=$('#q');
   $('#sk').onchange=e=>{sortk=e.target.value;render();};$('#oa').onchange=e=>{oa=e.target.checked;render();};
   inp.onfocus=()=>{sopen=true;renderSearch();};
@@ -408,6 +410,25 @@ async function trackPage(id){
   await draw();
   clearInterval(box._t);box._t=setInterval(draw,15000);
 }
+const TST=[['new','Primită'],['confirmed','Confirmată'],['ready','Pregătită'],['delivered','Predată']];
+let bubId='',bubFirst=true;
+async function refreshBubble(){
+  const el=document.getElementById('mybub');if(!el)return;
+  const id=myOrders()[0];let dis='';try{dis=localStorage.getItem('bubx')||'';}catch(e){}
+  if(!id||dis===id){el.innerHTML='';bubId='';return;}
+  let r;try{r=await api('/api/orders/'+encodeURIComponent(id)+'/track');}catch(e){el.innerHTML='';bubId='';return;}
+  const N=TST.length,cur=Math.max(0,TST.findIndex(x=>x[0]===(r.status||'new'))),pos=k=>((k+0.5)/N*100)+'%';
+  if(bubId!==id||!el.querySelector('.tl2')){
+    bubId=id;bubFirst=true;
+    el.innerHTML='<div class="bub"><div class="bh"><b>Comanda ta</b><span id="bs"></span><button type="button" id="bx" aria-label="Închide">✕</button></div><div class="tl2 mini"><div class="line"></div><div class="fill"></div><div class="mv" style="left:'+pos(0)+'"></div><div class="steps">'+TST.map(x=>'<div class="sp"><div class="dot2"></div><div class="sl">'+x[1]+'</div></div>').join('')+'</div></div></div>';
+    el.querySelector('.bub').onclick=e=>{if(e.target.id==='bx'){try{localStorage.setItem('bubx',id);}catch(x){}el.innerHTML='';bubId='';return;}trackPage(id);};
+  }
+  el.querySelector('#bs').textContent=TST[cur][1];
+  el.querySelectorAll('.sp').forEach((sp,i)=>{const d=sp.querySelector('.dot2');d.className='dot2'+(i<cur?' done':i===cur?' cur':'');d.textContent=i<cur?'✓':String(i+1);sp.querySelector('.sl').className='sl'+(i===cur?' on':'');});
+  const go=()=>{const mv=el.querySelector('.mv'),fl=el.querySelector('.fill');if(mv){mv.style.left=pos(cur);fl.style.width=(cur/N*100)+'%';}};
+  if(bubFirst){bubFirst=false;setTimeout(go,150);}else go();
+}
+
 async function trackView(ids){
   const o=modal('<h3>Comenzile mele</h3><p class="note">Se încarcă…</p>');
   const ST={new:'Nouă',confirmed:'Confirmată',ready:'Pregătită',delivered:'Predată'};
@@ -445,7 +466,7 @@ function cartView(){
       try{
         const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone})});
         try{const m=myOrders();m.unshift(r.id);localStorage.setItem('myorders',JSON.stringify(m.slice(0,20)));}catch(e){}
-        const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();refresh();pay(good,total,name,phone,r.id);
+        const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();try{localStorage.removeItem('bubx');}catch(e){}refresh();refreshBubble();pay(good,total,name,phone,r.id);
       }catch(x){alert(x.message);await refresh();draw();}
     };
   };
@@ -694,11 +715,12 @@ function startLang(){
   trDom(document.body);
   obs.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['placeholder','title','aria-label']});
 }
-Object.assign(EX,{"Am primit comanda ta. Vânzătorul o va confirma în curând.":"Nous avons reçu ta commande. Le vendeur va bientôt la confirmer.","Comanda ta a fost confirmată.":"Ta commande a été confirmée.","Comanda ta este pregătită pentru predare.":"Ta commande est prête à être remise.","Comanda a fost predată. Mulțumim!":"La commande a été remise. Merci !","Pregătită":"Préparée","Comanda ta":"Ta commande","Comandă primită":"Commande reçue","Pregătită pentru predare":"Prête à remettre","Mesaj de la vânzător":"Message du vendeur","Înapoi la magazin":"Retour à la boutique","Contactează vânzătorul pe WhatsApp":"Contacter le vendeur sur WhatsApp","Starea se actualizează automat.":"Le statut se met à jour automatiquement.","Comanda nu a fost găsită.":"Commande introuvable.","Vezi starea comenzii":"Voir l'état de la commande","Urmărește comanda":"Suivre la commande","Trimite un e-mail de test":"Envoyer un e-mail de test","Mesaj pentru client (apare pe pagina de urmărire)":"Message pour le client (affiché sur la page de suivi)"});
+Object.assign(EX,{"Primită":"Reçue","Am primit comanda ta. Vânzătorul o va confirma în curând.":"Nous avons reçu ta commande. Le vendeur va bientôt la confirmer.","Comanda ta a fost confirmată.":"Ta commande a été confirmée.","Comanda ta este pregătită pentru predare.":"Ta commande est prête à être remise.","Comanda a fost predată. Mulțumim!":"La commande a été remise. Merci !","Pregătită":"Préparée","Comanda ta":"Ta commande","Comandă primită":"Commande reçue","Pregătită pentru predare":"Prête à remettre","Mesaj de la vânzător":"Message du vendeur","Înapoi la magazin":"Retour à la boutique","Contactează vânzătorul pe WhatsApp":"Contacter le vendeur sur WhatsApp","Starea se actualizează automat.":"Le statut se met à jour automatiquement.","Comanda nu a fost găsită.":"Commande introuvable.","Vezi starea comenzii":"Voir l'état de la commande","Urmărește comanda":"Suivre la commande","Trimite un e-mail de test":"Envoyer un e-mail de test","Mesaj pentru client (apare pe pagina de urmărire)":"Message pour le client (affiché sur la page de suivi)"});
 if(lang==='fr')startLang();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 initSearch();
-refresh().then(()=>{const P=new URLSearchParams(location.search),a=P.get('a'),c=P.get('comanda');if(a){const it=S.items.find(x=>x.id===a);if(it)openItem(it);}if(c)trackPage(c);});
+setInterval(refreshBubble,20000);
+refresh().then(()=>{refreshBubble();const P=new URLSearchParams(location.search),a=P.get('a'),c=P.get('comanda');if(a){const it=S.items.find(x=>x.id===a);if(it)openItem(it);}if(c)trackPage(c);});
 </script>
 </body>
 </html>
