@@ -106,6 +106,7 @@ main{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
 @media(min-width:700px){main{grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:10px}.body h2{font-size:.85rem}.price{font-size:.95rem}.body button{font-size:.78rem;padding:5px}}
 .srt{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}.srt select{flex:1;min-width:140px}.srt .chip{margin:0}
 .bdg{align-self:flex-start;background:#be123c;color:#fff;border-radius:6px;padding:1px 6px;font-size:.62rem;font-weight:700}.old{color:var(--mut);font-weight:400;font-size:.75em}
+.tp{position:fixed;inset:0;z-index:8;overflow:auto;background:linear-gradient(160deg,#f9a8d4,#f472b6 50%,#ec4899) fixed;padding:16px}.pg{max-width:560px;margin:auto;display:flex;flex-direction:column;gap:12px}.pg h2{margin:6px 0}.tl{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px}.st{display:flex;align-items:center;gap:10px;padding:8px 0;opacity:.55}.st.done,.st.cur{opacity:1}.dot{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#fff;border:2px solid var(--bd);flex:none}.st.done .dot{background:#16a34a;color:#fff;border-color:#16a34a}.st.cur .dot{background:var(--ac);border-color:#f472b6}.st.cur span:last-child{font-weight:700}
 </style>
 </head>
 <body>
@@ -362,13 +363,35 @@ function openItem(it){
 }
 
 const myOrders=()=>{try{return JSON.parse(localStorage.getItem('myorders')||'[]');}catch(e){return [];}};
+function closeTrack(){const b=document.getElementById('tp');if(b){clearInterval(b._t);b.remove();}try{history.replaceState(null,'','/');}catch(e){}}
+async function trackPage(id){
+  let box=document.getElementById('tp');
+  if(!box){box=document.createElement('div');box.id='tp';box.className='tp';document.body.appendChild(box);}
+  const wn=((S.settings||{}).wa||'').replace(/\D/g,'');
+  const STEPS=[['new','Comandă primită'],['confirmed','Confirmată'],['ready','Pregătită pentru predare'],['delivered','Predată']];
+  const draw=async()=>{
+    let r;
+    try{r=await api('/api/orders/'+encodeURIComponent(id)+'/track');}
+    catch(e){box.innerHTML='<div class="pg"><h2>Comanda nu a fost găsită.</h2><button id="tb">← Înapoi la magazin</button></div>';box.querySelector('#tb').onclick=closeTrack;clearInterval(box._t);return;}
+    const cur=Math.max(0,STEPS.findIndex(x=>x[0]===(r.status||'new')));
+    box.innerHTML='<div class="pg"><button id="tb">← Înapoi la magazin</button><h2>Comanda ta</h2>'+
+      '<div class="box"><b>'+esc(r.items.map(i=>i.title+(i.qty>1?' ×'+i.qty:'')).join(', '))+'</b><small>Total: '+eur(r.total)+' · '+(r.paid?'Plătită':'Neplătită')+'</small></div>'+
+      '<div class="tl">'+STEPS.map((x,i)=>'<div class="st'+(i<cur?' done':i===cur?' cur':'')+'"><span class="dot">'+(i<cur?'✓':i+1)+'</span><span>'+x[1]+'</span></div>').join('')+'</div>'+
+      (r.note?'<div class="box"><small>Mesaj de la vânzător</small><b style="white-space:pre-wrap">'+esc(r.note)+'</b></div>':'')+
+      '<p class="note">Starea se actualizează automat.</p>'+(wn?'<a class="btn pri" target="_blank" rel="noopener" href="https://wa.me/'+wn+'">Contactează vânzătorul pe WhatsApp</a>':'');
+    box.querySelector('#tb').onclick=closeTrack;
+  };
+  await draw();
+  clearInterval(box._t);box._t=setInterval(draw,30000);
+}
 async function trackView(ids){
   const o=modal('<h3>Comenzile mele</h3><p class="note">Se încarcă…</p>');
-  const ST={new:'Nouă',confirmed:'Confirmată',delivered:'Predată'};
+  const ST={new:'Nouă',confirmed:'Confirmată',ready:'Pregătită',delivered:'Predată'};
   let h='';
-  for(const id of ids){try{const r=await api('/api/orders/'+encodeURIComponent(id)+'/track');h+='<div class="box"><b>'+esc(r.items.map(i=>i.title+(i.qty>1?' ×'+i.qty:'')).join(', '))+'</b><small>Total: '+eur(r.total)+' · '+(r.paid?'Plătită':'Neplătită')+'</small><div style="margin-top:6px">Stare: <b>'+(ST[r.status]||'Nouă')+'</b></div></div>';}catch(e){}}
+  for(const id of ids){try{const r=await api('/api/orders/'+encodeURIComponent(id)+'/track');h+='<div class="box"><b>'+esc(r.items.map(i=>i.title+(i.qty>1?' ×'+i.qty:'')).join(', '))+'</b><small>Total: '+eur(r.total)+' · '+(r.paid?'Plătită':'Neplătită')+'</small><div style="margin-top:6px">Stare: <b>'+(ST[r.status]||'Nouă')+'</b></div><div class="row"><button data-tp="'+esc(id)+'">Vezi starea comenzii</button></div></div>';}catch(e){}}
   o.querySelector('.dlg').innerHTML='<h3>Comenzile mele</h3>'+(h||'<p class="note">Nicio comandă găsită.</p>')+'<div class="row"><button id="cl">Închide</button></div>';
   o.querySelector('#cl').onclick=()=>o.remove();
+  o.querySelectorAll('[data-tp]').forEach(b=>b.onclick=()=>{o.remove();trackPage(b.dataset.tp);});
 }
 
 function cartView(){
@@ -398,14 +421,14 @@ function cartView(){
       try{
         const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone})});
         try{const m=myOrders();m.unshift(r.id);localStorage.setItem('myorders',JSON.stringify(m.slice(0,20)));}catch(e){}
-        const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();refresh();pay(good,total,name,phone);
+        const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();refresh();pay(good,total,name,phone,r.id);
       }catch(x){alert(x.message);await refresh();draw();}
     };
   };
   draw();
 }
 
-function pay(L,total,name,phone){
+function pay(L,total,name,phone,oid){
   const wn=(S.settings.wa||'').replace(/\D/g,'');
   const wa=wn?'https://wa.me/'+wn+'?text='+encodeURIComponent('Bună, am făcut o comandă ('+L.map(i=>i.title+(i.q>1?' ×'+i.q:'')).join(', ')+', total '+eur(total)+'). Numele meu: '+name):'';
   const o=modal('<h3>Mulțumim, '+esc(name)+'!</h3><p>Comanda ta a fost înregistrată: '+L.map(i=>esc(i.title+(i.q>1?' ×'+i.q:''))).join(', ')+'.<br>Total: <b>'+eur(total)+'</b></p>'+
@@ -413,7 +436,8 @@ function pay(L,total,name,phone){
    '<div class="box"><b>💵 Plata, de preferat în numerar (cash)</b><small style="margin-top:6px">Vânzătorul te va contacta pentru a vă înțelege.</small></div>'+
    '<div class="box"><b>📲 Altfel, vei primi numărul de cont (IBAN) în privat pe WhatsApp</b><small style="margin-top:6px">Vânzătorul îți scrie pe numărul indicat de tine ('+esc(phone)+').</small></div>'+
    '<p class="note">Dacă plătești prin transfer bancar, fă-o doar după ce ai primit mesajul lui. Comanda ta este confirmată imediat ce plata a fost primită.</p><p class="note">Poți urmări starea comenzii cu butonul „Comenzile mele”.</p>'+
-   '<div class="row">'+(wa?'<a class="btn pri" id="wa" target="_blank" rel="noopener" href="'+esc(wa)+'">Anunță vânzătorul pe WhatsApp</a>':'')+'<button id="cl"'+(wa?' disabled':'')+'>Închide</button></div>',!!wa);
+   '<div class="row">'+(wa?'<a class="btn pri" id="wa" target="_blank" rel="noopener" href="'+esc(wa)+'">Anunță vânzătorul pe WhatsApp</a>':'')+'<button id="cl"'+(wa?' disabled':'')+'>Închide</button></div>'+(oid?'<div class="row"><button type="button" id="trk">Urmărește comanda</button></div>':''),!!wa);
+  if(oid)o.querySelector('#trk').onclick=()=>{o.remove();trackPage(oid);};
   if(wa)o.querySelector('#wa').onclick=()=>{o.querySelector('#cl').disabled=false;};
   o.querySelector('#cl').onclick=()=>o.remove();
 }
@@ -452,13 +476,14 @@ function ordersView(){
     const L=S.orders;
     o.querySelector('.dlg').innerHTML='<h3>Comenzi</h3>'+(L.length?L.map(x=>
      '<div class="box"><b>'+esc(oi(x).map(lno).join(', '))+' · '+eur(ot(x))+'</b><small>'+esc(x.name)+' · <a style="color:inherit" href="tel:'+esc(x.phone.replace(/[^\d+]/g,''))+'">'+esc(x.phone)+'</a></small><small>'+esc(new Date(x.date).toLocaleString('ro-RO'))+'</small>'+
-     '<div class="row"><select data-st="'+esc(x.id)+'">'+[['new','Nouă'],['confirmed','Confirmată'],['delivered','Predată']].map(([v,t])=>'<option value="'+v+'"'+((x.status||'new')===v?' selected':'')+'>'+t+'</option>').join('')+'</select></div>'+
+     '<div class="row"><select data-st="'+esc(x.id)+'">'+[['new','Nouă'],['confirmed','Confirmată'],['ready','Pregătită'],['delivered','Predată']].map(([v,t])=>'<option value="'+v+'"'+((x.status||'new')===v?' selected':'')+'>'+t+'</option>').join('')+'</select></div><div class="row"><input data-nt="'+esc(x.id)+'" placeholder="Mesaj pentru client (apare pe pagina de urmărire)" value="'+esc(x.note||'')+'"></div>'+
      '<div class="row"><a class="btn pri" target="_blank" rel="noopener" href="'+esc(waLink(x))+'">💬 Trimite IBAN-ul pe WhatsApp</a></div>'+
      '<div class="row"><a class="btn" target="_blank" rel="noopener" href="'+esc(waNote(x))+'">💬 Mesaj: am luat comanda în considerare</a></div>'+
      '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Plătit</label><button data-pr="'+esc(x.id)+'">🖨️ PDF</button><button class="dng" data-rm="'+esc(x.id)+'">Șterge</button></div></div>').join('')
      :'<p class="note">Nicio comandă deocamdată.</p>')+'<div class="row"><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
     o.querySelectorAll('[data-st]').forEach(sel=>sel.onchange=async()=>{try{await api('/api/orders/'+sel.dataset.st,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:sel.value})});await refresh();draw();}catch(e){alert(e.message);}});
+    o.querySelectorAll('[data-nt]').forEach(i=>i.onchange=async()=>{try{await api('/api/orders/'+i.dataset.nt,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({note:i.value})});await refresh();}catch(e){alert(e.message);}});
     o.querySelectorAll('[data-pr]').forEach(b=>b.onclick=()=>printOrder(S.orders.find(x=>x.id===b.dataset.pr)));
     o.querySelectorAll('[data-paid]').forEach(c=>c.onchange=async()=>{
       try{await api('/api/orders/'+c.dataset.paid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({paid:c.checked})});await refresh();draw();}catch(e){alert(e.message);}});
@@ -612,8 +637,9 @@ function addForm(){
 
 function settings(){
   const st=S.settings;
-  const o=modal('<h3>Setări</h3><label>Numele magazinului</label><input id="s1" value="'+esc(st.shop)+'"><label>Numărul tău de WhatsApp (cu prefix, ex. 40712345678)</label><input id="s4" value="'+esc(st.wa)+'" inputmode="tel"><label>Despre noi (text afișat clienților)</label><textarea id="s5" rows="4">'+esc(st.about||'')+'</textarea><label>Zona / adresa</label><input id="s6" value="'+esc(st.zone||'')+'"><label>Titularul contului (vizibil doar pentru tine)</label><input id="s2" value="'+esc(st.holder)+'"><label>IBAN (vizibil doar pentru tine)</label><input id="s3" value="'+esc(st.iban)+'" placeholder="RO00 AAAA 0000 0000 0000 0000"><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
+  const o=modal('<h3>Setări</h3><label>Numele magazinului</label><input id="s1" value="'+esc(st.shop)+'"><label>Numărul tău de WhatsApp (cu prefix, ex. 40712345678)</label><input id="s4" value="'+esc(st.wa)+'" inputmode="tel"><label>Despre noi (text afișat clienților)</label><textarea id="s5" rows="4">'+esc(st.about||'')+'</textarea><label>Zona / adresa</label><input id="s6" value="'+esc(st.zone||'')+'"><label>Titularul contului (vizibil doar pentru tine)</label><input id="s2" value="'+esc(st.holder)+'"><label>IBAN (vizibil doar pentru tine)</label><input id="s3" value="'+esc(st.iban)+'" placeholder="RO00 AAAA 0000 0000 0000 0000"><div class="row"><button type="button" id="te">Trimite un e-mail de test</button></div><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>');
   o.querySelector('#no').onclick=()=>o.remove();
+  o.querySelector('#te').onclick=async e=>{e.target.disabled=true;try{const r=await api('/api/test-email',{method:'POST'});alert((r.ok?'✅ ':'❌ ')+r.detail);}catch(x){alert(x.message);}e.target.disabled=false;};
   o.querySelector('#ok').onclick=async()=>{
     try{await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({shop:o.querySelector('#s1').value,wa:o.querySelector('#s4').value,holder:o.querySelector('#s2').value,iban:o.querySelector('#s3').value,about:o.querySelector('#s5').value,zone:o.querySelector('#s6').value})});o.remove();refresh();}
     catch(e){alert(e.message);}};
@@ -644,10 +670,11 @@ function startLang(){
   trDom(document.body);
   obs.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['placeholder','title','aria-label']});
 }
+Object.assign(EX,{"Pregătită":"Préparée","Comanda ta":"Ta commande","Comandă primită":"Commande reçue","Pregătită pentru predare":"Prête à remettre","Mesaj de la vânzător":"Message du vendeur","Înapoi la magazin":"Retour à la boutique","Contactează vânzătorul pe WhatsApp":"Contacter le vendeur sur WhatsApp","Starea se actualizează automat.":"Le statut se met à jour automatiquement.","Comanda nu a fost găsită.":"Commande introuvable.","Vezi starea comenzii":"Voir l'état de la commande","Urmărește comanda":"Suivre la commande","Trimite un e-mail de test":"Envoyer un e-mail de test","Mesaj pentru client (apare pe pagina de urmărire)":"Message pour le client (affiché sur la page de suivi)"});
 if(lang==='fr')startLang();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 initSearch();
-refresh().then(()=>{const P=new URLSearchParams(location.search),a=P.get('a'),c=P.get('comanda');if(a){const it=S.items.find(x=>x.id===a);if(it)openItem(it);}if(c)trackView([c]);});
+refresh().then(()=>{const P=new URLSearchParams(location.search),a=P.get('a'),c=P.get('comanda');if(a){const it=S.items.find(x=>x.id===a);if(it)openItem(it);}if(c)trackPage(c);});
 </script>
 </body>
 </html>
