@@ -411,12 +411,18 @@ async function trackPage(id){
   clearInterval(box._t);box._t=setInterval(draw,15000);
 }
 const TST=[['new','Primită'],['confirmed','Confirmată'],['ready','Pregătită'],['delivered','Predată']];
-let bubId='',bubFirst=true,bubDis='';
+let bubId='',bubFirst=true,bubDis='',bubTimer=0;
 async function refreshBubble(){
   const el=document.getElementById('mybub');if(!el)return;
-  const id=myOrders()[0],dis=bubDis;
-  if(!id||dis===id){el.innerHTML='';bubId='';return;}
-  let r;try{r=await api('/api/orders/'+encodeURIComponent(id)+'/track');}catch(e){el.innerHTML='';bubId='';return;}
+  const ids=myOrders().slice(0,5),clear=()=>{el.innerHTML='';bubId='';};
+  const cand=bubId&&ids.includes(bubId)?[bubId,...ids.filter(x=>x!==bubId)]:ids;
+  let id='',r=null;
+  for(const c of cand){
+    try{const t=await api('/api/orders/'+encodeURIComponent(c)+'/track');
+      if(t.status!=='delivered'||(c===bubId&&el.querySelector('.tl2'))){id=c;r=t;break;}
+    }catch(e){}
+  }
+  if(!id||bubDis===id){clear();return;}
   const N=TST.length,cur=Math.max(0,TST.findIndex(x=>x[0]===(r.status||'new'))),pos=k=>((k+0.5)/N*100)+'%';
   if(bubId!==id||!el.querySelector('.tl2')){
     bubId=id;bubFirst=true;
@@ -427,6 +433,7 @@ async function refreshBubble(){
   el.querySelectorAll('.sp').forEach((sp,i)=>{const d=sp.querySelector('.dot2');d.className='dot2'+(i<cur?' done':i===cur?' cur':'');d.textContent=i<cur?'✓':String(i+1);sp.querySelector('.sl').className='sl'+(i===cur?' on':'');});
   const go=()=>{const mv=el.querySelector('.mv'),fl=el.querySelector('.fill');if(mv){mv.style.left=pos(cur);fl.style.width=(cur/N*100)+'%';}};
   if(bubFirst){bubFirst=false;setTimeout(go,150);}else go();
+  if(r.status==='delivered'&&!bubTimer)bubTimer=setTimeout(()=>{bubTimer=0;clear();},8000);
 }
 
 async function trackView(ids){
