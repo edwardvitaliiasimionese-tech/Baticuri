@@ -245,7 +245,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   res.json({ ok: true, total, id: oid });
 }));
 
-app.get('/api/orders/:id/track', limiter(200, 3600e3), wrap(async (req, res) => {
+app.get('/api/orders/:id/track', limiter(3000, 3600e3), wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Negăsit' });
   res.json({ status: o.status || 'new', paid: !!o.paid, total: o.total, note: o.note || '', date: o.date, items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1 })) });
