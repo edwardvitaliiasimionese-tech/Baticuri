@@ -107,6 +107,19 @@ main{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
 .srt{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}.srt select{flex:1;min-width:140px}.srt .chip{margin:0}
 .bdg{align-self:flex-start;background:#be123c;color:#fff;border-radius:6px;padding:1px 6px;font-size:.62rem;font-weight:700}.old{color:var(--mut);font-weight:400;font-size:.75em}
 .tp{position:fixed;inset:0;z-index:8;overflow:auto;background:linear-gradient(160deg,#f9a8d4,#f472b6 50%,#ec4899) fixed;padding:16px}.pg{max-width:560px;margin:auto;display:flex;flex-direction:column;gap:12px}.pg h2{margin:6px 0}.tl{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px}.st{display:flex;align-items:center;gap:10px;padding:8px 0;opacity:.55}.st.done,.st.cur{opacity:1}.dot{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#fff;border:2px solid var(--bd);flex:none}.st.done .dot{background:#16a34a;color:#fff;border-color:#16a34a}.st.cur .dot{background:var(--ac);border-color:#f472b6}.st.cur span:last-child{font-weight:700}
+.tl2{position:relative;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px 6px 12px}
+.tl2 .line,.tl2 .fill{position:absolute;top:32px;height:4px;border-radius:2px}
+.tl2 .line{left:12.5%;right:12.5%;background:#e5e7eb}
+.tl2 .fill{left:12.5%;width:0;background:#16a34a;transition:width .9s ease}
+.tl2 .mv{position:absolute;top:33px;left:12.5%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;border:3px solid #ec4899;background:rgba(236,72,153,.15);z-index:2;transition:left .9s cubic-bezier(.4,0,.2,1);animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(236,72,153,.5)}50%{box-shadow:0 0 0 10px rgba(236,72,153,0)}}
+.tl2 .steps{display:grid;grid-template-columns:repeat(4,1fr);position:relative}
+.tl2 .sp{text-align:center;padding:0 2px}
+.tl2 .dot2{width:28px;height:28px;margin:0 auto;border-radius:50%;display:grid;place-items:center;background:#fff;border:2px solid var(--bd);position:relative;z-index:1;font-size:.8rem;transition:all .5s}
+.tl2 .dot2.done{background:#16a34a;border-color:#16a34a;color:#fff}
+.tl2 .dot2.cur{background:var(--ac);border-color:#ec4899}
+.tl2 .sl{font-size:.72rem;margin-top:8px;opacity:.6;line-height:1.2}
+.tl2 .sl.on{opacity:1;font-weight:700}
 </style>
 </head>
 <body>
@@ -368,21 +381,32 @@ async function trackPage(id){
   let box=document.getElementById('tp');
   if(!box){box=document.createElement('div');box.id='tp';box.className='tp';document.body.appendChild(box);}
   const wn=((S.settings||{}).wa||'').replace(/\D/g,'');
-  const STEPS=[['new','Comandă primită'],['confirmed','Confirmată'],['ready','Pregătită pentru predare'],['delivered','Predată']];
+  const STEPS=[['new','Comandă primită','Am primit comanda ta. Vânzătorul o va confirma în curând.'],['confirmed','Confirmată','Comanda ta a fost confirmată.'],['ready','Pregătită pentru predare','Comanda ta este pregătită pentru predare.'],['delivered','Predată','Comanda a fost predată. Mulțumim!']];
+  const N=STEPS.length,pos=k=>((k+0.5)/N*100)+'%';
+  let first=true;
   const draw=async()=>{
     let r;
     try{r=await api('/api/orders/'+encodeURIComponent(id)+'/track');}
     catch(e){box.innerHTML='<div class="pg"><h2>Comanda nu a fost găsită.</h2><button id="tb">← Înapoi la magazin</button></div>';box.querySelector('#tb').onclick=closeTrack;clearInterval(box._t);return;}
     const cur=Math.max(0,STEPS.findIndex(x=>x[0]===(r.status||'new')));
-    box.innerHTML='<div class="pg"><button id="tb">← Înapoi la magazin</button><h2>Comanda ta</h2>'+
-      '<div class="box"><b>'+esc(r.items.map(i=>i.title+(i.qty>1?' ×'+i.qty:'')).join(', '))+'</b><small>Total: '+eur(r.total)+' · '+(r.paid?'Plătită':'Neplătită')+'</small></div>'+
-      '<div class="tl">'+STEPS.map((x,i)=>'<div class="st'+(i<cur?' done':i===cur?' cur':'')+'"><span class="dot">'+(i<cur?'✓':i+1)+'</span><span>'+x[1]+'</span></div>').join('')+'</div>'+
-      (r.note?'<div class="box"><small>Mesaj de la vânzător</small><b style="white-space:pre-wrap">'+esc(r.note)+'</b></div>':'')+
-      '<p class="note">Starea se actualizează automat.</p>'+(wn?'<a class="btn pri" target="_blank" rel="noopener" href="https://wa.me/'+wn+'">Contactează vânzătorul pe WhatsApp</a>':'');
-    box.querySelector('#tb').onclick=closeTrack;
+    if(!box.querySelector('.tl2')){
+      box.innerHTML='<div class="pg"><button id="tb">← Înapoi la magazin</button><h2>Comanda ta</h2><div class="box" id="ti"></div><div class="tl2"><div class="line"></div><div class="fill" id="fl"></div><div class="mv" id="mv"></div><div class="steps">'+STEPS.map(x=>'<div class="sp"><div class="dot2"></div><div class="sl">'+x[1]+'</div></div>').join('')+'</div></div><div class="box" id="td"></div><div id="tn"></div><p class="note">Starea se actualizează automat.</p><div id="tw"></div></div>';
+      box.querySelector('#tb').onclick=closeTrack;
+      box.querySelector('#mv').style.left=pos(0);
+    }
+    box.querySelector('#ti').innerHTML='<b>'+esc(r.items.map(i=>i.title+(i.qty>1?' ×'+i.qty:'')).join(', '))+'</b><small>Total: '+eur(r.total)+' · '+(r.paid?'Plătită':'Neplătită')+'</small>';
+    box.querySelector('#td').innerHTML='<b>'+esc(STEPS[cur][2])+'</b>';
+    box.querySelector('#tn').innerHTML=r.note?'<div class="box"><small>Mesaj de la vânzător</small><b style="white-space:pre-wrap">'+esc(r.note)+'</b></div>':'';
+    box.querySelector('#tw').innerHTML=wn?'<a class="btn pri" target="_blank" rel="noopener" href="https://wa.me/'+wn+'">Contactează vânzătorul pe WhatsApp</a>':'';
+    box.querySelectorAll('.sp').forEach((el,i)=>{
+      const d=el.querySelector('.dot2');d.className='dot2'+(i<cur?' done':i===cur?' cur':'');d.textContent=i<cur?'✓':String(i+1);
+      el.querySelector('.sl').className='sl'+(i===cur?' on':'');
+    });
+    const go=()=>{box.querySelector('#mv').style.left=pos(cur);box.querySelector('#fl').style.width=(cur/N*100)+'%';};
+    if(first){first=false;setTimeout(go,150);}else go();
   };
   await draw();
-  clearInterval(box._t);box._t=setInterval(draw,30000);
+  clearInterval(box._t);box._t=setInterval(draw,15000);
 }
 async function trackView(ids){
   const o=modal('<h3>Comenzile mele</h3><p class="note">Se încarcă…</p>');
@@ -670,7 +694,7 @@ function startLang(){
   trDom(document.body);
   obs.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['placeholder','title','aria-label']});
 }
-Object.assign(EX,{"Pregătită":"Préparée","Comanda ta":"Ta commande","Comandă primită":"Commande reçue","Pregătită pentru predare":"Prête à remettre","Mesaj de la vânzător":"Message du vendeur","Înapoi la magazin":"Retour à la boutique","Contactează vânzătorul pe WhatsApp":"Contacter le vendeur sur WhatsApp","Starea se actualizează automat.":"Le statut se met à jour automatiquement.","Comanda nu a fost găsită.":"Commande introuvable.","Vezi starea comenzii":"Voir l'état de la commande","Urmărește comanda":"Suivre la commande","Trimite un e-mail de test":"Envoyer un e-mail de test","Mesaj pentru client (apare pe pagina de urmărire)":"Message pour le client (affiché sur la page de suivi)"});
+Object.assign(EX,{"Am primit comanda ta. Vânzătorul o va confirma în curând.":"Nous avons reçu ta commande. Le vendeur va bientôt la confirmer.","Comanda ta a fost confirmată.":"Ta commande a été confirmée.","Comanda ta este pregătită pentru predare.":"Ta commande est prête à être remise.","Comanda a fost predată. Mulțumim!":"La commande a été remise. Merci !","Pregătită":"Préparée","Comanda ta":"Ta commande","Comandă primită":"Commande reçue","Pregătită pentru predare":"Prête à remettre","Mesaj de la vânzător":"Message du vendeur","Înapoi la magazin":"Retour à la boutique","Contactează vânzătorul pe WhatsApp":"Contacter le vendeur sur WhatsApp","Starea se actualizează automat.":"Le statut se met à jour automatiquement.","Comanda nu a fost găsită.":"Commande introuvable.","Vezi starea comenzii":"Voir l'état de la commande","Urmărește comanda":"Suivre la commande","Trimite un e-mail de test":"Envoyer un e-mail de test","Mesaj pentru client (apare pe pagina de urmărire)":"Message pour le client (affiché sur la page de suivi)"});
 if(lang==='fr')startLang();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 initSearch();
