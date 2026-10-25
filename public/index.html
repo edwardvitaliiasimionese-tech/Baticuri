@@ -411,17 +411,17 @@ async function trackPage(id){
   clearInterval(box._t);box._t=setInterval(draw,15000);
 }
 const TST=[['new','Primită'],['confirmed','Confirmată'],['ready','Pregătită'],['delivered','Predată']];
-let bubId='',bubFirst=true;
+let bubId='',bubFirst=true,bubDis='';
 async function refreshBubble(){
   const el=document.getElementById('mybub');if(!el)return;
-  const id=myOrders()[0];let dis='';try{dis=localStorage.getItem('bubx')||'';}catch(e){}
+  const id=myOrders()[0],dis=bubDis;
   if(!id||dis===id){el.innerHTML='';bubId='';return;}
   let r;try{r=await api('/api/orders/'+encodeURIComponent(id)+'/track');}catch(e){el.innerHTML='';bubId='';return;}
   const N=TST.length,cur=Math.max(0,TST.findIndex(x=>x[0]===(r.status||'new'))),pos=k=>((k+0.5)/N*100)+'%';
   if(bubId!==id||!el.querySelector('.tl2')){
     bubId=id;bubFirst=true;
     el.innerHTML='<div class="bub"><div class="bh"><b>Comanda ta</b><span id="bs"></span><button type="button" id="bx" aria-label="Închide">✕</button></div><div class="tl2 mini"><div class="line"></div><div class="fill"></div><div class="mv" style="left:'+pos(0)+'"></div><div class="steps">'+TST.map(x=>'<div class="sp"><div class="dot2"></div><div class="sl">'+x[1]+'</div></div>').join('')+'</div></div></div>';
-    el.querySelector('.bub').onclick=e=>{if(e.target.id==='bx'){try{localStorage.setItem('bubx',id);}catch(x){}el.innerHTML='';bubId='';return;}trackPage(id);};
+    el.querySelector('.bub').onclick=e=>{if(e.target.id==='bx'){bubDis=id;el.innerHTML='';bubId='';return;}trackPage(id);};
   }
   el.querySelector('#bs').textContent=TST[cur][1];
   el.querySelectorAll('.sp').forEach((sp,i)=>{const d=sp.querySelector('.dot2');d.className='dot2'+(i<cur?' done':i===cur?' cur':'');d.textContent=i<cur?'✓':String(i+1);sp.querySelector('.sl').className='sl'+(i===cur?' on':'');});
@@ -466,7 +466,7 @@ function cartView(){
       try{
         const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone})});
         try{const m=myOrders();m.unshift(r.id);localStorage.setItem('myorders',JSON.stringify(m.slice(0,20)));}catch(e){}
-        const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();try{localStorage.removeItem('bubx');}catch(e){}refresh();refreshBubble();pay(good,total,name,phone,r.id);
+        const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();bubDis='';refresh();refreshBubble();pay(good,total,name,phone,r.id);
       }catch(x){alert(x.message);await refresh();draw();}
     };
   };
