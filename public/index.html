@@ -122,6 +122,7 @@ main{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
 .tl2 .sl.on{opacity:1;font-weight:700}
 .bubwrap{max-width:1100px;margin:0 auto;padding:0 12px}.bub{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:8px 10px;margin-bottom:10px;cursor:pointer}.bh{display:flex;align-items:center;gap:8px;font-size:.85rem}.bh span{flex:1;color:var(--mut)}.bh button{padding:0 7px;border-radius:50%}
 .tl2.mini{padding:10px 0 2px;border:none;background:none}.tl2.mini .line,.tl2.mini .fill{top:18px;height:3px}.tl2.mini .mv{top:20px;width:26px;height:26px;margin:-13px 0 0 -13px;border-width:2px}.tl2.mini .dot2{width:20px;height:20px;font-size:.6rem;border-width:1px}.tl2.mini .sl{font-size:.6rem;margin-top:4px}
+.tr{display:flex;justify-content:space-between;align-items:center;min-height:16px}.fv{cursor:pointer;color:#be123c;font-size:1rem;line-height:1}.low{color:#b45309;font-size:.66rem;font-weight:700;line-height:1.2}.vr select{width:auto}
 </style>
 </head>
 <body>
@@ -133,7 +134,7 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const CUR='EUR'; // schimbă în 'RON' pentru lei
 const eur=n=>new Intl.NumberFormat('ro-RO',{style:'currency',currency:CUR}).format(n);
 let S={settings:{},items:[],orders:[],categories:[]},admin=false,cart=[];
-let q='',fcat='',fsub='',sopen=false,sortk='new',oa=false;
+let q='',fcat='',fsub='',sopen=false,sortk='new',oa=false,ofv=false,promoA=null;
 let lang=(()=>{try{return localStorage.getItem('lang')==='fr'?'fr':'ro';}catch(e){return 'ro';}})();
 try{cart=JSON.parse(localStorage.getItem('cart')||'[]');}catch(e){}
 const saveCart=()=>{try{localStorage.setItem('cart',JSON.stringify(cart));}catch(e){}};
@@ -164,10 +165,10 @@ function resize(file){return new Promise(res=>{
 function render(){
   const st=S.settings;
   $('#top').innerHTML=
-   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button id="lang">'+(lang==='fr'?'RO':'FR')+'</button>'+(myOrders().length?'<button id="mine">Comenzile mele</button>':'')+'<button class="pri" id="cartb">🛒 Coș'+(cartCount()?' ('+cartCount()+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="stats">Statistici</button><button id="cats">Categorii</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>';
+   '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button id="lang">'+(lang==='fr'?'RO':'FR')+'</button>'+(myOrders().length?'<button id="mine">Comenzile mele</button>':'')+'<button class="pri" id="cartb">🛒 Coș'+(cartCount()?' ('+cartCount()+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="promos">Coduri promo</button><button id="trash">Gunoi</button><button id="stats">Statistici</button><button id="cats">Categorii</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>';
   $('#rest').innerHTML='<div class="shop"><main>'+(shown().length?shown().map(it=>
     '<div class="card'+(it.sold||it.reserved?' sold':'')+'">'+(it.hidden?'<div class="nd top">Ascuns – doar tu îl vezi</div>':'')+(it.sold||it.reserved?'<div class="nd top">Articolul nu mai este disponibil</div>':(it.variants&&it.variants.some(v=>v.sold||v.reserved)?'<div class="nd top">Unele variante nu mai sunt disponibile</div>':''))+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
-    '<div class="body">'+(it.badge?'<span class="bdg">'+esc(it.badge)+'</span>':'')+'<h2 data-open="'+esc(it.id)+'">'+sw(it.color)+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+(it.oldPrice?'<s class="old">'+eur(it.oldPrice)+'</s> ':'')+(it.variants&&it.variants.length?'de la ':'')+eur(it.price)+'</div>'+
+    '<div class="body">'+'<div class="tr">'+(it.badge?'<span class="bdg">'+esc(it.badge)+'</span>':'<span></span>')+'<span class="fv" data-fav="'+esc(it.id)+'">'+(isFav(it.id)?'♥':'♡')+'</span></div>'+'<h2 data-open="'+esc(it.id)+'">'+sw(it.color)+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+(it.oldPrice?'<s class="old">'+eur(it.oldPrice)+'</s> ':'')+(it.variants&&it.variants.length?'de la ':'')+eur(it.price)+'</div>'+lowCard(it)+
     (it.sold?'<button disabled>Vândut</button>':it.reserved?'<button disabled>Indisponibil</button>':(it.variants&&it.variants.length)?'<button class="pri" data-open="'+esc(it.id)+'">Alege</button>':(qOf(it.id)?stepper(it.id):'<button class="pri" data-cart="'+esc(it.id)+'">＋ Coș</button>'))+
     (admin?'<button data-edit="'+esc(it.id)+'">Editează</button><button data-dup="'+esc(it.id)+'">Duplică</button><button data-hide="'+esc(it.id)+'">'+(it.hidden?'Arată':'Ascunde')+'</button><button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
     :'<div class="empty">'+(q||fcat?'Niciun rezultat.':'Niciun articol deocamdată.')+'</div>')+'</main>'+sideHtml()+'</div>';
@@ -178,7 +179,7 @@ function render(){
     $('#add').onclick=addForm;$('#ord').onclick=ordersView;
     document.querySelectorAll('[data-dup]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('/api/items/'+b.dataset.dup+'/duplicate',{method:'POST'});refresh();}catch(e){alert(e.message);b.disabled=false;}});
     document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=async()=>{const it=S.items.find(x=>x.id===b.dataset.hide);try{await api('/api/items/'+it.id+'/hidden',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({hidden:!it.hidden})});refresh();}catch(e){alert(e.message);}});
-    document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editForm(S.items.find(x=>x.id===b.dataset.edit)));$('#set').onclick=settings;$('#cats').onclick=catsEditor;$('#stats').onclick=statsView;
+    document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editForm(S.items.find(x=>x.id===b.dataset.edit)));$('#set').onclick=settings;$('#cats').onclick=catsEditor;$('#stats').onclick=statsView;$('#promos').onclick=promosEditor;$('#trash').onclick=trashView;
     $('#out').onclick=async()=>{await api('/api/logout',{method:'POST'});refresh();};
     document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
       if(!confirm('Ștergi acest articol?'))return;
@@ -193,6 +194,7 @@ function render(){
   document.querySelectorAll('[data-open]').forEach(e=>e.onclick=()=>openItem(S.items.find(x=>x.id===e.dataset.open)));
   document.querySelectorAll('[data-cart]').forEach(b=>b.onclick=()=>{addOne(b.dataset.cart);render();});
   bindQty($('#rest'),render);
+  document.querySelectorAll('[data-fav]').forEach(b=>b.onclick=e=>{e.stopPropagation();toggleFav(b.dataset.fav);render();});
 }
 
 function loginForm(){
@@ -222,8 +224,13 @@ function sideHtml(){
 }
 
 const norm=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const favs=()=>{try{return JSON.parse(localStorage.getItem('favs')||'[]');}catch(e){return [];}};
+const isFav=id=>favs().includes(id);
+const toggleFav=id=>{const f=favs(),i=f.indexOf(id);if(i>=0)f.splice(i,1);else f.push(id);try{localStorage.setItem('favs',JSON.stringify(f));}catch(e){}};
+const lowTxt=n=>n===1?'Ultimul din stoc!':'Mai sunt doar '+n+' în stoc';
+const lowCard=it=>it.variants&&it.variants.length?(!it.sold&&!it.reserved&&it.variants.some(v=>v.qty>1&&!v.sold&&!v.reserved&&v.left>0&&v.left<=2)?'<div class="low">Stoc redus</div>':''):(!it.sold&&!it.reserved&&it.qty>1&&it.left>0&&it.left<=2?'<div class="low">'+lowTxt(it.left)+'</div>':'');
 function shown(){
-  const L=shown0().filter(it=>!oa||(!it.sold&&!it.reserved));
+  const L=shown0().filter(it=>!oa||(!it.sold&&!it.reserved)).filter(it=>!ofv||isFav(it.id));
   return sortk==='asc'?[...L].sort((a,b)=>a.price-b.price):sortk==='desc'?[...L].sort((a,b)=>b.price-a.price):L;
 }
 function shown0(){
@@ -232,9 +239,9 @@ function shown0(){
 }
 
 function initSearch(){
-  $('#root').innerHTML='<div id="top"></div><div id="mybub" class="bubwrap"></div><div id="sbar"><div class="sb"><input id="q" type="search" placeholder="🔍 Caută articole sau alege o categorie…" autocomplete="off"><div id="sp"></div><div class="srt"><select id="sk"><option value="new">Cele mai noi</option><option value="asc">Preț crescător</option><option value="desc">Preț descrescător</option></select><label class="chip"><input type="checkbox" id="oa" style="width:auto"> Doar disponibile</label></div></div></div><div id="rest"></div>';
+  $('#root').innerHTML='<div id="top"></div><div id="mybub" class="bubwrap"></div><div id="sbar"><div class="sb"><input id="q" type="search" placeholder="🔍 Caută articole sau alege o categorie…" autocomplete="off"><div id="sp"></div><div class="srt"><select id="sk"><option value="new">Cele mai noi</option><option value="asc">Preț crescător</option><option value="desc">Preț descrescător</option></select><label class="chip"><input type="checkbox" id="oa" style="width:auto"> Doar disponibile</label><label class="chip"><input type="checkbox" id="of" style="width:auto"> ♥ Doar favorite</label></div></div></div><div id="rest"></div>';
   const inp=$('#q');
-  $('#sk').onchange=e=>{sortk=e.target.value;render();};$('#oa').onchange=e=>{oa=e.target.checked;render();};
+  $('#sk').onchange=e=>{sortk=e.target.value;render();};$('#oa').onchange=e=>{oa=e.target.checked;render();};$('#of').onchange=e=>{ofv=e.target.checked;render();};
   inp.onfocus=()=>{sopen=true;renderSearch();};
   inp.oninput=()=>{q=inp.value;render();renderSearch();};
   document.addEventListener('click',e=>{if(sopen&&!e.target.closest('.sb')){sopen=false;renderSearch();}});
@@ -277,10 +284,56 @@ function statsView(){
   const L=S.orders,paid=L.filter(o=>o.paid),sum=a=>a.reduce((t,o)=>t+ot(o),0),cnt={};
   L.forEach(o=>oi(o).forEach(i=>{cnt[i.title]=(cnt[i.title]||0)+(i.qty||1);}));
   const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const o=modal('<h3>Statistici</h3><div class="box"><small>Număr comenzi</small><b>'+L.length+'</b></div><div class="box"><small>Plătite</small><b>'+paid.length+' · '+eur(sum(paid))+'</b></div><div class="box"><small>Neplătite</small><b>'+(L.length-paid.length)+' · '+eur(sum(L.filter(x=>!x.paid)))+'</b></div><div class="box"><small>Cele mai comandate articole</small>'+(top.length?top.map(([t,n])=>'<b>'+esc(t)+' ×'+n+'</b>').join('<br>'):'<b>—</b>')+'</div><div class="row"><button id="xl">Exportă comenzile (Excel)</button></div><div class="row"><button id="bk">Descarcă backup</button><button id="cl">Închide</button></div>');
+  const o=modal('<h3>Statistici</h3><div class="box"><small>Număr comenzi</small><b>'+L.length+'</b></div><div class="box"><small>Plătite</small><b>'+paid.length+' · '+eur(sum(paid))+'</b></div><div class="box"><small>Neplătite</small><b>'+(L.length-paid.length)+' · '+eur(sum(L.filter(x=>!x.paid)))+'</b></div><div class="box"><small>Cele mai comandate articole</small>'+(top.length?top.map(([t,n])=>'<b>'+esc(t)+' ×'+n+'</b>').join('<br>'):'<b>—</b>')+'</div><div id="wlx"></div><div class="row"><button id="xl">Exportă comenzile (Excel)</button></div><div class="row"><button id="bk">Descarcă backup</button><button id="cl">Închide</button></div>');
   o.querySelector('#cl').onclick=()=>o.remove();
   o.querySelector('#xl').onclick=exportCsv;
+  api('/api/waitlist').then(W=>{
+    o.querySelector('#wlx').innerHTML=W.length?'<div class="box"><small>Listă de așteptare</small>'+W.map(w=>'<div style="margin-top:8px"><b>'+esc(w.title)+'</b><small>'+esc(w.name)+' · '+esc(w.phone)+'</small><a class="btn" target="_blank" rel="noopener" href="https://wa.me/'+esc(w.phone.replace(/\D/g,''))+'?text='+encodeURIComponent('Bună '+w.name+', „'+w.title+'” este din nou disponibil!')+'">Anunță pe WhatsApp</a> <button data-wx="'+esc(w.id)+'">✕</button></div>').join('')+'</div>':'';
+    o.querySelectorAll('[data-wx]').forEach(b=>b.onclick=async()=>{try{await api('/api/waitlist/'+b.dataset.wx,{method:'DELETE'});b.parentNode.remove();}catch(e){alert(e.message);}});
+  }).catch(()=>{});
   o.querySelector('#bk').onclick=()=>{location.href='/api/backup';};
+}
+function waitForm(key){
+  const u=unit(key);if(!u)return;
+  const o=modal('<h3>Anunță-mă când revine</h3><p>'+esc(u.title)+'</p><label>Numele tău</label><input id="wn"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="wp" type="tel" placeholder="+40 712 345 678"><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Trimite</button></div>');
+  o.querySelector('#no').onclick=()=>o.remove();
+  o.querySelector('#ok').onclick=async e=>{
+    const name=o.querySelector('#wn').value.trim(),phone=o.querySelector('#wp').value.trim();
+    if(!name||!/^(\+|00)\d[\d\s.-]{7,}$/.test(phone)){alert('Trebuie numele tău și numărul de WhatsApp cu prefixul țării, de exemplu +40 712 345 678.');return;}
+    e.target.disabled=true;
+    try{await api('/api/waitlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,name,phone})});o.remove();alert('Mulțumim! Te vom anunța când articolul revine.');}
+    catch(x){alert(x.message);e.target.disabled=false;}
+  };
+}
+async function promosEditor(){
+  let P=[];try{P=await api('/api/promos');}catch(e){alert(e.message);return;}
+  const o=modal('');
+  const draw=()=>{
+    o.querySelector('.dlg').innerHTML='<h3>Coduri promo</h3><p class="note">Procent (%) sau sumă fixă. „Max” = de câte ori poate fi folosit (0 = nelimitat).</p>'+
+      P.map((p,i)=>'<div class="box"><div class="vr"><input data-pcode="'+i+'" placeholder="COD" value="'+esc(p.code)+'"><select data-ptype="'+i+'"><option value="pct"'+(p.type==='pct'?' selected':'')+'>%</option><option value="amt"'+(p.type==='amt'?' selected':'')+'>Sumă</option></select><input data-pval="'+i+'" type="number" min="0" step="0.01" placeholder="Valoare" value="'+esc(p.value)+'"></div><div class="vr"><input data-pmax="'+i+'" type="number" min="0" placeholder="Max (0 = nelimitat)" value="'+esc(p.max||0)+'"><label style="margin:0"><input type="checkbox" data-pact="'+i+'" style="width:auto"'+(p.active!==false?' checked':'')+'> Activ</label><small>Folosit: '+(p.uses||0)+'</small><button type="button" data-prm="'+i+'">✕</button></div></div>').join('')+
+      '<div class="row"><button type="button" id="ap">+ Cod</button></div><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Salvează</button></div>';
+    o.querySelectorAll('[data-pcode]').forEach(x=>x.oninput=()=>{P[+x.dataset.pcode].code=x.value;});
+    o.querySelectorAll('[data-ptype]').forEach(x=>x.onchange=()=>{P[+x.dataset.ptype].type=x.value;});
+    o.querySelectorAll('[data-pval]').forEach(x=>x.oninput=()=>{P[+x.dataset.pval].value=x.value;});
+    o.querySelectorAll('[data-pmax]').forEach(x=>x.oninput=()=>{P[+x.dataset.pmax].max=x.value;});
+    o.querySelectorAll('[data-pact]').forEach(x=>x.onchange=()=>{P[+x.dataset.pact].active=x.checked;});
+    o.querySelectorAll('[data-prm]').forEach(x=>x.onclick=()=>{P.splice(+x.dataset.prm,1);draw();});
+    o.querySelector('#ap').onclick=()=>{P.push({code:'',type:'pct',value:'',max:0,active:true});draw();};
+    o.querySelector('#no').onclick=()=>o.remove();
+    o.querySelector('#ok').onclick=async()=>{try{await api('/api/promos',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({promos:P})});o.remove();}catch(e){alert(e.message);}};
+  };
+  draw();
+}
+async function trashView(){
+  let L=[];try{L=await api('/api/trash');}catch(e){alert(e.message);return;}
+  const o=modal('');
+  const draw=()=>{
+    o.querySelector('.dlg').innerHTML='<h3>Coș de gunoi</h3><p class="note">Articolele șterse rămân aici 30 de zile, apoi dispar definitiv.</p>'+(L.length?L.map(t=>'<div class="box" style="display:flex;gap:10px;align-items:center">'+(t.img?'<img class="vimg" src="'+esc(t.img)+'" alt="">':'')+'<div style="flex:1"><b>'+esc(t.title)+'</b><small>'+esc(new Date(t.at).toLocaleDateString('ro-RO'))+'</small><div class="row"><button data-rs="'+esc(t.id)+'">Restaurează</button><button class="dng" data-pd="'+esc(t.id)+'">Șterge definitiv</button></div></div></div>').join(''):'<p class="note">Gunoiul este gol.</p>')+'<div class="row"><button id="cl">Închide</button></div>';
+    o.querySelector('#cl').onclick=()=>o.remove();
+    o.querySelectorAll('[data-rs]').forEach(b=>b.onclick=async()=>{try{await api('/api/trash/'+b.dataset.rs+'/restore',{method:'POST'});L=L.filter(t=>t.id!==b.dataset.rs);refresh();draw();}catch(e){alert(e.message);}});
+    o.querySelectorAll('[data-pd]').forEach(b=>b.onclick=async()=>{if(!confirm('Ștergi definitiv acest articol?'))return;try{await api('/api/trash/'+b.dataset.pd,{method:'DELETE'});L=L.filter(t=>t.id!==b.dataset.pd);draw();}catch(e){alert(e.message);}});
+  };
+  draw();
 }
 function aboutView(){
   const st=S.settings,wn=(st.wa||'').replace(/\D/g,'');
@@ -360,17 +413,18 @@ function unit(key){
 function openItem(it){
   if(!it)return;
   const o=modal('');
-  const btn=(key,sold,res)=>sold?'<button disabled>Vândut</button>':res?'<button disabled>Indisponibil</button>':(qOf(key)?stepper(key):'<button class="pri" data-tg="'+esc(key)+'">Adaugă în coș</button>');
+  const btn=(key,sold,res)=>(sold||res)?'<button disabled>'+(sold?'Vândut':'Indisponibil')+'</button><button type="button" data-wl="'+esc(key)+'">Anunță-mă când revine</button>':(qOf(key)?stepper(key):'<button class="pri" data-tg="'+esc(key)+'">Adaugă în coș</button>');
   const draw=()=>{
     const V=it.variants||[];
     o.querySelector('.dlg').innerHTML=(!V.length&&(it.sold||it.reserved)?'<p class="nd">Articolul nu mai este disponibil</p>':'')+(it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+
       '<h3>'+sw(it.color)+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p>'+
-      (V.length?V.map(v=>'<div class="box" style="display:flex;gap:10px;align-items:flex-start">'+(v.img?'<img class="vimg" src="'+esc(v.img)+'" alt="">':'')+'<div style="flex:1">'+((v.sold||v.reserved)?'<div class="nd">Varianta nu mai este disponibilă</div>':'')+'<b>'+sw(v.color)+esc(v.name)+'</b><small>'+eur(v.price)+(v.qty>1&&!v.sold&&!v.reserved?' · disponibile: '+v.left:'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div></div>').join('')
-       :''+(it.qty>1&&!it.sold&&!it.reserved?'<p class="note">Disponibile: '+it.left+' buc.</p>':'')+'<div class="price" style="font-size:1.3rem">'+(it.oldPrice?'<s class="old">'+eur(it.oldPrice)+'</s> ':'')+eur(it.price)+'</div><div class="row">'+btn(it.id,it.sold,it.reserved)+'</div>')+
+      (V.length?V.map(v=>'<div class="box" style="display:flex;gap:10px;align-items:flex-start">'+(v.img?'<img class="vimg" src="'+esc(v.img)+'" alt="">':'')+'<div style="flex:1">'+((v.sold||v.reserved)?'<div class="nd">Varianta nu mai este disponibilă</div>':'')+'<b>'+sw(v.color)+esc(v.name)+'</b><small>'+eur(v.price)+(v.qty>1&&!v.sold&&!v.reserved?(v.left<=2?' · '+lowTxt(v.left):' · disponibile: '+v.left):'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div></div>').join('')
+       :''+(it.qty>1&&!it.sold&&!it.reserved?(it.left<=2?'<p class="low">'+lowTxt(it.left)+'</p>':'<p class="note">Disponibile: '+it.left+' buc.</p>'):'')+'<div class="price" style="font-size:1.3rem">'+(it.oldPrice?'<s class="old">'+eur(it.oldPrice)+'</s> ':'')+eur(it.price)+'</div><div class="row">'+btn(it.id,it.sold,it.reserved)+'</div>')+
       '<div class="row"><button id="sh">Partajează</button><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
     o.querySelector('#sh').onclick=()=>{const u=location.origin+'/?a='+it.id;if(navigator.share)navigator.share({title:it.title,url:u}).catch(()=>{});else window.open('https://wa.me/?text='+encodeURIComponent(it.title+' '+u),'_blank');};
     o.querySelectorAll('.gal img,.vimg').forEach(im=>im.onclick=()=>zoom(im.src));
+    o.querySelectorAll('[data-wl]').forEach(b=>b.onclick=()=>waitForm(b.dataset.wl));
     o.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{addOne(b.dataset.tg);render();draw();});
     bindQty(o,()=>{render();draw();});
   };
@@ -450,13 +504,13 @@ function cartView(){
   const o=modal('');
   const draw=()=>{
     const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'';
-    const L=cartLines(),good=L.filter(i=>!i.bad),total=good.reduce((t,i)=>t+i.price*i.q,0);
+    const L=cartLines(),good=L.filter(i=>!i.bad),sub=good.reduce((t,i)=>t+i.price*i.q,0),disc=promoA?(promoA.type==='pct'?Math.round(sub*promoA.value)/100:Math.min(promoA.value,sub)):0,total=Math.round((sub-disc)*100)/100;
     o.querySelector('.dlg').innerHTML='<h3>Coșul meu</h3>'+(L.length?
       L.map(i=>i.bad?
         '<div class="box"><div class="nd">'+(i.gone?'Articolul nu mai există':'Articolul nu mai este disponibil')+'</div><b>'+esc(i.title)+'</b><div style="margin-top:8px"><button class="dng" data-rm="'+esc(i.id)+'">Elimină</button></div></div>':
         '<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+' × '+i.q+' = '+eur(i.price*i.q)+'</small><div style="display:flex;gap:10px;align-items:center;margin-top:8px">'+stepper(i.id)+'<button class="dng" data-rm="'+esc(i.id)+'">Elimină</button></div></div>').join('')+
       (good.length?
-        '<div class="box"><small>Total de plată</small><b>'+eur(total)+'</b></div>'+
+        '<label>Cod promoțional</label><div class="row"><input id="pc" placeholder="COD" value="'+esc(promoA?promoA.code:'')+'"><button type="button" id="pa">Aplică</button></div>'+(promoA?'<div class="note">Reducere ('+esc(promoA.code)+'): −'+eur(disc)+'</div>':'')+'<div class="box"><small>Total de plată</small><b>'+eur(total)+'</b></div>'+
         '<label>Numele tău</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" placeholder="+40 712 345 678" value="'+esc(p0)+'">'+
         '<div class="row"><button id="cl">Continuă cumpărăturile</button><button class="pri" id="ok">Comandă</button></div>'
         :'<div class="row"><button id="cl">Închide</button></div>')
@@ -464,6 +518,8 @@ function cartView(){
     o.querySelector('#cl').onclick=()=>o.remove();
     o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>x!==b.dataset.rm);saveCart();render();draw();});
     bindQty(o,()=>{render();draw();});
+    const pa=o.querySelector('#pa');
+    if(pa)pa.onclick=async()=>{const c=o.querySelector('#pc').value.trim();if(!c){promoA=null;draw();return;}try{promoA=await api('/api/promo/'+encodeURIComponent(c));}catch(e){promoA=null;alert(e.message);}draw();};
     const ok=o.querySelector('#ok');
     if(ok)ok.onclick=async()=>{
       const name=o.querySelector('#n').value.trim(),phone=o.querySelector('#ph').value.trim();
@@ -471,9 +527,9 @@ function cartView(){
       const ids=cart.filter(k=>good.some(g=>g.id===k));
       ok.disabled=true;ok.textContent='Se trimite…';
       try{
-        const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone})});
+        const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone,promo:promoA?promoA.code:''})});
         try{const m=myOrders();m.unshift(r.id);localStorage.setItem('myorders',JSON.stringify(m.slice(0,20)));}catch(e){}
-        const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();bubDis='';refresh();refreshBubble();pay(good,total,name,phone,r.id);
+        promoA=null;const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();bubDis='';refresh();refreshBubble();pay(good,total,name,phone,r.id);
       }catch(x){alert(x.message);await refresh();draw();}
     };
   };
@@ -722,7 +778,8 @@ function startLang(){
   trDom(document.body);
   obs.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['placeholder','title','aria-label']});
 }
-Object.assign(EX,{"Primită":"Reçue","Am primit comanda ta. Vânzătorul o va confirma în curând.":"Nous avons reçu ta commande. Le vendeur va bientôt la confirmer.","Comanda ta a fost confirmată.":"Ta commande a été confirmée.","Comanda ta este pregătită pentru predare.":"Ta commande est prête à être remise.","Comanda a fost predată. Mulțumim!":"La commande a été remise. Merci !","Pregătită":"Préparée","Comanda ta":"Ta commande","Comandă primită":"Commande reçue","Pregătită pentru predare":"Prête à remettre","Mesaj de la vânzător":"Message du vendeur","Înapoi la magazin":"Retour à la boutique","Contactează vânzătorul pe WhatsApp":"Contacter le vendeur sur WhatsApp","Starea se actualizează automat.":"Le statut se met à jour automatiquement.","Comanda nu a fost găsită.":"Commande introuvable.","Vezi starea comenzii":"Voir l'état de la commande","Urmărește comanda":"Suivre la commande","Trimite un e-mail de test":"Envoyer un e-mail de test","Mesaj pentru client (apare pe pagina de urmărire)":"Message pour le client (affiché sur la page de suivi)"});
+Object.assign(EX,{"Anunță-mă când revine":"Préviens-moi quand il revient","Trimite":"Envoyer","Mulțumim! Te vom anunța când articolul revine.":"Merci ! On te préviendra quand l'article revient.","Cod promoțional":"Code promo","Aplică":"Appliquer","Cod promoțional invalid sau expirat":"Code promo invalide ou expiré","Coduri promo":"Codes promo","Cod":"Code","Gunoi":"Corbeille","Coș de gunoi":"Corbeille","Gunoiul este gol.":"La corbeille est vide.","Restaurează":"Restaurer","Șterge definitiv":"Supprimer définitivement","Activ":"Actif","Sumă":"Montant","Valoare":"Valeur","Ultimul din stoc!":"Dernier en stock !","Stoc redus":"Stock limité","Doar favorite":"Seulement favoris","Listă de așteptare":"Liste d'attente","Anunță pe WhatsApp":"Prévenir sur WhatsApp","Procent (%) sau sumă fixă. „Max” = de câte ori poate fi folosit (0 = nelimitat).":"Pourcentage (%) ou montant fixe. « Max » = nombre d'utilisations possibles (0 = illimité).","Articolele șterse rămân aici 30 de zile, apoi dispar definitiv.":"Les articles supprimés restent ici 30 jours, puis disparaissent définitivement.","Ștergi definitiv acest articol?":"Supprimer définitivement cet article ?","Primită":"Reçue","Am primit comanda ta. Vânzătorul o va confirma în curând.":"Nous avons reçu ta commande. Le vendeur va bientôt la confirmer.","Comanda ta a fost confirmată.":"Ta commande a été confirmée.","Comanda ta este pregătită pentru predare.":"Ta commande est prête à être remise.","Comanda a fost predată. Mulțumim!":"La commande a été remise. Merci !","Pregătită":"Préparée","Comanda ta":"Ta commande","Comandă primită":"Commande reçue","Pregătită pentru predare":"Prête à remettre","Mesaj de la vânzător":"Message du vendeur","Înapoi la magazin":"Retour à la boutique","Contactează vânzătorul pe WhatsApp":"Contacter le vendeur sur WhatsApp","Starea se actualizează automat.":"Le statut se met à jour automatiquement.","Comanda nu a fost găsită.":"Commande introuvable.","Vezi starea comenzii":"Voir l'état de la commande","Urmărește comanda":"Suivre la commande","Trimite un e-mail de test":"Envoyer un e-mail de test","Mesaj pentru client (apare pe pagina de urmărire)":"Message pour le client (affiché sur la page de suivi)"});
+PRE.push(['Mai sunt doar ','Plus que '],['Reducere (','Remise ('],['Folosit: ','Utilisé : ']);SUB.push([' în stoc',' en stock']);
 if(lang==='fr')startLang();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 initSearch();
