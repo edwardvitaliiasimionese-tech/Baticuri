@@ -109,14 +109,18 @@ const applyVariantImages = async (req, variants) => {
 };
 
 const notify = async text => {
-  const k = process.env.RESEND_API_KEY, to = process.env.NOTIFY_EMAIL;
-  if (!k || !to) return { ok: false, detail: 'Lipsesc variabilele ' + [!k && 'RESEND_API_KEY', !to && 'NOTIFY_EMAIL'].filter(Boolean).join(' și ') + ' pe Render.' };
-  try {
-    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + k, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: 'Magazin <onboarding@resend.dev>', to: [to], subject: text.split('\n')[0], text }) });
-    const body = await r.text();
-    if (!r.ok) console.error('Resend a refuzat e-mailul:', r.status, body);
-    return { ok: r.ok, detail: r.ok ? 'E-mail trimis către ' + to : 'Resend: ' + r.status + ' ' + body.slice(0, 300) };
-  } catch (e) { console.error('Resend:', e); return { ok: false, detail: String(e.message || e) }; }
+  const k = process.env.RESEND_API_KEY, list = String(process.env.NOTIFY_EMAIL || '').split(/[,;\s]+/).filter(Boolean);
+  if (!k || !list.length) return { ok: false, detail: 'Lipsesc variabilele ' + [!k && 'RESEND_API_KEY', !list.length && 'NOTIFY_EMAIL'].filter(Boolean).join(' și ') + ' pe Render.' };
+  const one = async to => {
+    try {
+      const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + k, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: 'Magazin <onboarding@resend.dev>', to: [to], subject: text.split('\n')[0], text }) });
+      const body = await r.text();
+      if (!r.ok) console.error('Resend a refuzat e-mailul către', to, r.status, body);
+      return { to, ok: r.ok, body: r.status + ' ' + body };
+    } catch (e) { console.error('Resend:', e); return { to, ok: false, body: String(e.message || e) }; }
+  };
+  const res = await Promise.all(list.slice(0, 10).map(one)), good = res.filter(x => x.ok), bad = res.filter(x => !x.ok);
+  return { ok: bad.length === 0, detail: (good.length ? 'Trimis către: ' + good.map(x => x.to).join(', ') : '') + (bad.length ? (good.length ? '\n' : '') + 'Refuzat: ' + bad.map(x => x.to + ' (' + x.body.slice(0, 120) + ')').join('; ') : '') };
 };
 const eh = t => String(t || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const INDEX = require('fs').readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
