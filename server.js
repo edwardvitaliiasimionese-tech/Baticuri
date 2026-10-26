@@ -15,7 +15,7 @@ const DEFAULT = () => ({ settings: { shop: 'Magazinul meu', holder: '', iban: ''
 const HASH = x => crypto.createHash('sha256').update(x + KEY).digest('hex').slice(0, 24);
 const DBN = 'db-' + HASH('db') + '.json';
 let legacyGone = false, lastBackup = '';
-const fixDb = d => { d.orders = d.orders || []; d.categories = d.categories || []; return d; };
+const fixDb = d => { d.orders = d.orders || []; d.categories = d.categories || []; d.promos = d.promos || []; d.waitlist = d.waitlist || []; d.trash = d.trash || []; return d; };
 async function load() {
   let r = await fetch(`${OBJ}/${BUCKET}/${DBN}?t=${Date.now()}`, { headers: H() });
   if (!r.ok && (r.status === 400 || r.status === 404)) r = await fetch(`${OBJ}/${BUCKET}/db.json?t=${Date.now()}`, { headers: H() });
@@ -213,13 +213,57 @@ app.put('/api/categories', needAdmin, wrap(async (req, res) => {
   await save(d); res.json(cats);
 }));
 
+const imgsOf = it => [...(it.imgs || []), ...(it.variants || []).map(v => v.img).filter(Boolean)];
+const purgeTrash = d => { const lim = Date.now() - 30 * 864e5; d.trash = d.trash.filter(t => { if (t.at < lim) { imgsOf(t.item).forEach(delImage); return false; } return true; }); };
 app.delete('/api/items/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), it = d.items.find(x => x.id === req.params.id);
   if (!it) return res.status(404).json({ error: 'Negăsit' });
-  d.items = d.items.filter(x => x !== it); await save(d);
-  [...it.imgs, ...(it.variants || []).map(v => v.img).filter(Boolean)].forEach(delImage);
+  d.items = d.items.filter(x => x !== it); d.trash.unshift({ item: it, at: Date.now() }); purgeTrash(d);
+  await save(d); res.json({ ok: true });
+}));
+app.get('/api/trash', needAdmin, wrap(async (req, res) => { const d = await load(); res.json(d.trash.map(t => ({ id: t.item.id, title: t.item.title, img: (t.item.imgs || [])[0] || '', at: t.at }))); }));
+app.post('/api/trash/:id/restore', needAdmin, wrap(async (req, res) => {
+  const d = await load(), i = d.trash.findIndex(t => t.item.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: 'Negăsit' });
+  const [t] = d.trash.splice(i, 1); d.items.unshift(t.item); sync(d); await save(d); res.json({ ok: true });
+}));
+app.delete('/api/trash/:id', needAdmin, wrap(async (req, res) => {
+  const d = await load(), t = d.trash.find(x => x.item.id === req.params.id);
+  if (!t) return res.status(404).json({ error: 'Negăsit' });
+  d.trash = d.trash.filter(x => x !== t); imgsOf(t.item).forEach(delImage); await save(d); res.json({ ok: true });
+}));
+
+app.get('/api/promos', needAdmin, wrap(async (req, res) => res.json((await load()).promos)));
+app.put('/api/promos', needAdmin, wrap(async (req, res) => {
+  const d = await load(), raw = Array.isArray(req.body.promos) ? req.body.promos : [], out = [];
+  for (const p of raw.slice(0, 50)) {
+    const code = String(p.code || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 20), value = parseFloat(p.value), type = p.type === 'amt' ? 'amt' : 'pct';
+    if (!code || !(value > 0) || (type === 'pct' && value > 100) || out.some(x => x.code === code)) continue;
+    const prev = d.promos.find(x => x.code === code);
+    out.push({ code, type, value, max: Math.max(0, parseInt(p.max) || 0), active: p.active !== false, uses: prev ? prev.uses || 0 : 0 });
+  }
+  d.promos = out; await save(d); res.json(out);
+}));
+app.get('/api/promo/:code', limiter(60, 3600e3), wrap(async (req, res) => {
+  const d = await load(), p = d.promos.find(x => x.code === String(req.params.code).toUpperCase());
+  if (!p || !p.active || (p.max && (p.uses || 0) >= p.max)) return res.status(404).json({ error: 'Cod promoțional invalid sau expirat' });
+  res.json({ code: p.code, type: p.type, value: p.value });
+}));
+
+app.post('/api/waitlist', limiter(30, 3600e3), wrap(async (req, res) => {
+  const d = await load(), key = String(req.body.key || ''), u = resolve(d, key), c = (v, n) => String(v || '').trim().slice(0, n);
+  const name = c(req.body.name, 80), phone = c(req.body.phone, 30);
+  if (!u) return res.status(404).json({ error: 'Negăsit' });
+  if (!name || phone.length < 3) return res.status(400).json({ error: 'Numele și telefonul sunt obligatorii' });
+  if (!d.waitlist.some(w => w.key === key && w.phone === phone)) {
+    d.waitlist.unshift({ id: crypto.randomBytes(5).toString('hex'), key, title: u.title, name, phone, date: new Date().toISOString() });
+    d.waitlist = d.waitlist.slice(0, 500); await save(d);
+    notify('⏳ Listă de așteptare: ' + name + ' (' + phone + ') vrea „' + u.title + '”');
+  }
   res.json({ ok: true });
 }));
+app.get('/api/waitlist', needAdmin, wrap(async (req, res) => res.json((await load()).waitlist)));
+app.delete('/api/waitlist/:id', needAdmin, wrap(async (req, res) => { const d = await load(); d.waitlist = d.waitlist.filter(w => w.id !== req.params.id); await save(d); res.json({ ok: true }); }));
 
 app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   const d = await load(), c = (v, n) => String(v || '').trim().slice(0, n);
@@ -238,11 +282,19 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   }
   if (d.orders.length >= 1000) return res.status(429).json({ error: 'Prea multe comenzi în așteptare' });
   const total = Math.round(items.reduce((t, i) => t + i.price * (i.qty || 1), 0) * 100) / 100;
+  let discount = 0, promo = '';
+  if (req.body.promo) {
+    const pr = d.promos.find(x => x.code === String(req.body.promo).toUpperCase());
+    if (!pr || !pr.active || (pr.max && (pr.uses || 0) >= pr.max)) return res.status(400).json({ error: 'Cod promoțional invalid sau expirat' });
+    discount = Math.round((pr.type === 'pct' ? total * pr.value / 100 : Math.min(pr.value, total)) * 100) / 100;
+    promo = pr.code; pr.uses = (pr.uses || 0) + 1;
+  }
+  const final = Math.round((total - discount) * 100) / 100;
   const oid = crypto.randomBytes(6).toString('hex');
-  d.orders.unshift({ id: oid, status: 'new', items, total, name, phone, date: new Date().toISOString(), paid: false });
+  d.orders.unshift({ id: oid, status: 'new', items, total: final, subtotal: total, discount, promo, name, phone, date: new Date().toISOString(), paid: false });
   await save(d);
-  notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + total + ' €');
-  res.json({ ok: true, total, id: oid });
+  notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + final + ' €' + (promo ? ' (cod ' + promo + ')' : ''));
+  res.json({ ok: true, total: final, id: oid });
 }));
 
 app.get('/api/orders/:id/track', limiter(3000, 3600e3), wrap(async (req, res) => {
