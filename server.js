@@ -110,6 +110,15 @@ const applyVariantImages = async (req, variants) => {
 
 const notify = async text => {
   const k = process.env.RESEND_API_KEY, list = String(process.env.NOTIFY_EMAIL || '').split(/[,;\s]+/).filter(Boolean);
+  const bk = process.env.BREVO_API_KEY, bs = process.env.BREVO_SENDER;
+  if (bk && bs && list.length) {
+    try {
+      const r = await fetch('https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': bk, 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ sender: { name: 'Magazin', email: bs }, to: list.slice(0, 10).map(email => ({ email })), subject: text.split('\n')[0], textContent: text }) });
+      const body = await r.text();
+      if (!r.ok) console.error('Brevo a refuzat e-mailul:', r.status, body);
+      return { ok: r.ok, detail: r.ok ? 'Trimis (Brevo) către: ' + list.join(', ') : 'Brevo: ' + r.status + ' ' + body.slice(0, 300) };
+    } catch (e) { console.error('Brevo:', e); return { ok: false, detail: String(e.message || e) }; }
+  }
   if (!k || !list.length) return { ok: false, detail: 'Lipsesc variabilele ' + [!k && 'RESEND_API_KEY', !list.length && 'NOTIFY_EMAIL'].filter(Boolean).join(' și ') + ' pe Render.' };
   const one = async to => {
     try {
@@ -132,15 +141,15 @@ app.get('/manifest.webmanifest', wrap(async (req, res) => {
   res.type('application/manifest+json').json({ name: n, short_name: n.slice(0, 12), start_url: '/', display: 'standalone', background_color: '#f472b6', theme_color: '#f472b6', icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] });
 }));
 app.get('/', wrap(async (req, res) => {
-  let title = 'Magazin', desc = 'Comandă direct de aici.', img = '';
+  let shop = 'Magazin', title = 'Magazin', desc = 'Comandă direct de aici.', img = '';
   try {
-    const d = await load(); title = d.settings.shop;
+    const d = await load(); title = shop = d.settings.shop;
     const it = d.items.find(x => x.id === req.query.a && !x.hidden);
     if (it) { title = it.title + ' – ' + d.settings.shop; desc = it.price + ' €' + (it.desc ? ' · ' + it.desc.slice(0, 120) : ''); img = it.imgs[0] || (it.variants || []).map(v => v.img).find(Boolean) || ''; }
     else { const f = d.items.find(x => !x.hidden && x.imgs[0]); img = f ? f.imgs[0] : ''; }
   } catch (e) {}
   const tags = '<meta property="og:title" content="' + eh(title) + '"><meta property="og:description" content="' + eh(desc) + '"><meta property="og:type" content="website">' + (img ? '<meta property="og:image" content="' + eh(img) + '">' : '') + '<meta name="twitter:card" content="summary_large_image">';
-  res.type('html').send(INDEX.replace('</head>', tags + '</head>'));
+  res.type('html').send(INDEX.replace('</head>', () => tags + '</head>').replace('__SHOP__', () => eh(shop)));
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -275,6 +284,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   const raw = (Array.isArray(req.body.itemIds) ? req.body.itemIds.map(String) : []).slice(0, 200), counts = new Map();
   raw.forEach(k => counts.set(k, (counts.get(k) || 0) + 1));
   if (!counts.size) return res.status(400).json({ error: 'Coș gol' });
+  if (!req.body.consent) return res.status(400).json({ error: 'Trebuie să accepți folosirea datelor pentru comandă.' });
   if (!name || phone.length < 3) return res.status(400).json({ error: 'Numele și telefonul sunt obligatorii' });
   const items = [];
   for (const [id, n] of counts) {
@@ -295,7 +305,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   }
   const final = Math.round((total - discount) * 100) / 100;
   const oid = crypto.randomBytes(6).toString('hex');
-  d.orders.unshift({ id: oid, status: 'new', items, total: final, subtotal: total, discount, promo, name, phone, date: new Date().toISOString(), paid: false });
+  d.orders.unshift({ id: oid, status: 'new', items, total: final, subtotal: total, discount, promo, consent: new Date().toISOString(), name, phone, date: new Date().toISOString(), paid: false });
   await save(d);
   notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + final + ' €' + (promo ? ' (cod ' + promo + ')' : ''));
   res.json({ ok: true, total: final, id: oid });
@@ -345,4 +355,17 @@ app.delete('/api/orders/:id', needAdmin, wrap(async (req, res) => {
 }));
 
 app.use((err, req, res, next) => res.status(400).json({ error: err.message || 'Eroare' }));
+let lastSummary = '';
+const SUM_HOUR = parseInt(process.env.SUMMARY_HOUR || '8'), TZ = process.env.SUMMARY_TZ || 'Europe/Bucharest';
+setInterval(async () => {
+  try {
+    const now = new Date(), day = now.toLocaleDateString('en-CA', { timeZone: TZ }), hour = parseInt(now.toLocaleString('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }));
+    if (hour !== SUM_HOUR || lastSummary === day) return;
+    lastSummary = day;
+    const d = await load(), open = d.orders.filter(o => (o.status || 'new') !== 'delivered');
+    if (!open.length) return;
+    const st = { new: 'nouă', confirmed: 'confirmată', ready: 'pregătită' };
+    await notify('📋 Rezumat zilnic: ' + open.filter(o => (o.status || 'new') === 'new').length + ' de confirmat, ' + open.filter(o => !o.paid).length + ' neplătite\n\n' + open.slice(0, 20).map(o => '• ' + o.name + ' (' + o.phone + ') – ' + oitems(o).map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + ' – ' + o.total + ' € – ' + st[o.status || 'new'] + (o.paid ? ', plătită' : ', neplătită')).join('\n'));
+  } catch (e) { console.error('Rezumat:', e); }
+}, 10 * 60e3);
 app.listen(PORT, () => console.log('Magazin pornit pe portul ' + PORT));
