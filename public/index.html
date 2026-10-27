@@ -123,9 +123,12 @@ main{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
 .bubwrap{max-width:1100px;margin:0 auto;padding:0 12px}.bub{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:8px 10px;margin-bottom:10px;cursor:pointer}.bh{display:flex;align-items:center;gap:8px;font-size:.85rem}.bh span{flex:1;color:var(--mut)}.bh button{padding:0 7px;border-radius:50%}
 .tl2.mini{padding:10px 0 2px;border:none;background:none}.tl2.mini .line,.tl2.mini .fill{top:18px;height:3px}.tl2.mini .mv{top:20px;width:26px;height:26px;margin:-13px 0 0 -13px;border-width:2px}.tl2.mini .dot2{width:20px;height:20px;font-size:.6rem;border-width:1px}.tl2.mini .sl{font-size:.6rem;margin-top:4px}
 .tr{display:flex;justify-content:space-between;align-items:center;min-height:16px}.fv{cursor:pointer;color:#be123c;font-size:1rem;line-height:1}.low{color:#b45309;font-size:.66rem;font-weight:700;line-height:1.2}.vr select{width:auto}
+#splash{position:fixed;inset:0;z-index:50;display:grid;place-items:center;text-align:center;background:linear-gradient(160deg,#f9a8d4,#f472b6 50%,#ec4899);transition:opacity .45s}#splash.off{opacity:0;pointer-events:none}#splash h1{margin:8px 0}.gem{font-size:3rem;color:#fff;animation:pulse2 1.2s infinite}@keyframes pulse2{50%{transform:scale(1.15)}}
+.rv{max-width:1100px;margin:0 auto;padding:0 12px 20px}.rvl{display:flex;gap:8px;overflow-x:auto}.rvi{flex:0 0 84px;background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:hidden;cursor:pointer;font-size:.7rem}.rvi img{width:100%;aspect-ratio:1;object-fit:cover;display:block}.rvi span{display:block;padding:3px 4px;line-height:1.2;max-height:2.5em;overflow:hidden}
 </style>
 </head>
 <body>
+<div id="splash"><div><div class="gem">◆</div><h1>Baticuri</h1><p>Se încarcă…</p></div></div>
 <div id="root"></div>
 <footer id="foot"></footer>
 <script>
@@ -171,7 +174,7 @@ function render(){
     '<div class="body">'+'<div class="tr">'+(it.badge?'<span class="bdg">'+esc(it.badge)+'</span>':'<span></span>')+'<span class="fv" data-fav="'+esc(it.id)+'">'+(isFav(it.id)?'♥':'♡')+'</span></div>'+'<h2 data-open="'+esc(it.id)+'">'+sw(it.color)+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+(it.oldPrice?'<s class="old">'+eur(it.oldPrice)+'</s> ':'')+(it.variants&&it.variants.length?'de la ':'')+eur(it.price)+'</div>'+lowCard(it)+
     (it.sold?'<button disabled>Vândut</button>':it.reserved?'<button disabled>Indisponibil</button>':(it.variants&&it.variants.length)?'<button class="pri" data-open="'+esc(it.id)+'">Alege</button>':(qOf(it.id)?stepper(it.id):'<button class="pri" data-cart="'+esc(it.id)+'">＋ Coș</button>'))+
     (admin?'<button data-edit="'+esc(it.id)+'">Editează</button><button data-dup="'+esc(it.id)+'">Duplică</button><button data-hide="'+esc(it.id)+'">'+(it.hidden?'Arată':'Ascunde')+'</button><button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
-    :'<div class="empty">'+(q||fcat?'Niciun rezultat.':'Niciun articol deocamdată.')+'</div>')+'</main>'+sideHtml()+'</div>';
+    :'<div class="empty">'+(q||fcat?'Niciun rezultat.':'Niciun articol deocamdată.')+'</div>')+'</main>'+sideHtml()+'</div>'+recentHtml();
   $('#foot').innerHTML='<a id="about">Despre noi / Contact</a>'+(admin?'':' · <a id="login">Zonă vânzător</a>');
   $('#about').onclick=aboutView;
   if($('#login'))$('#login').onclick=loginForm;
@@ -224,6 +227,13 @@ function sideHtml(){
 }
 
 const norm=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const recent=()=>{try{return JSON.parse(localStorage.getItem('recent')||'[]');}catch(e){return [];}};
+const pushRecent=id=>{const r=recent().filter(x=>x!==id);r.unshift(id);try{localStorage.setItem('recent',JSON.stringify(r.slice(0,8)));}catch(e){}};
+function recentHtml(){
+  const L=recent().map(id=>S.items.find(i=>i.id===id)).filter(Boolean);
+  if(!L.length)return '';
+  return '<div class="rv"><h3>Vizualizate recent</h3><div class="rvl">'+L.map(it=>'<div class="rvi" data-open="'+esc(it.id)+'">'+(it.imgs[0]?'<img src="'+esc(it.imgs[0])+'" alt="">':'')+'<span>'+esc(it.title)+'</span></div>').join('')+'</div></div>';
+}
 const favs=()=>{try{return JSON.parse(localStorage.getItem('favs')||'[]');}catch(e){return [];}};
 const isFav=id=>favs().includes(id);
 const toggleFav=id=>{const f=favs(),i=f.indexOf(id);if(i>=0)f.splice(i,1);else f.push(id);try{localStorage.setItem('favs',JSON.stringify(f));}catch(e){}};
@@ -295,7 +305,7 @@ function statsView(){
 }
 function waitForm(key){
   const u=unit(key);if(!u)return;
-  const o=modal('<h3>Anunță-mă când revine</h3><p>'+esc(u.title)+'</p><label>Numele tău</label><input id="wn"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="wp" type="tel" placeholder="+40 712 345 678"><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Trimite</button></div>');
+  const o=modal('<h3>Anunță-mă când revine</h3><p>'+esc(u.title)+'</p><label>Numele tău</label><input id="wn"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="wp" type="tel" placeholder="+40 712 345 678"><p class="note">Datele tale sunt folosite doar pentru a te anunța.</p><div class="row"><button id="no">Anulează</button><button class="pri" id="ok">Trimite</button></div>');
   o.querySelector('#no').onclick=()=>o.remove();
   o.querySelector('#ok').onclick=async e=>{
     const name=o.querySelector('#wn').value.trim(),phone=o.querySelector('#wp').value.trim();
@@ -412,6 +422,7 @@ function unit(key){
 
 function openItem(it){
   if(!it)return;
+  pushRecent(it.id);
   const o=modal('');
   const btn=(key,sold,res)=>(sold||res)?'<button disabled>'+(sold?'Vândut':'Indisponibil')+'</button><button type="button" data-wl="'+esc(key)+'">Anunță-mă când revine</button>':(qOf(key)?stepper(key):'<button class="pri" data-tg="'+esc(key)+'">Adaugă în coș</button>');
   const draw=()=>{
@@ -503,7 +514,7 @@ async function trackView(ids){
 function cartView(){
   const o=modal('');
   const draw=()=>{
-    const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'';
+    const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'',g0=!!(o.querySelector('#gdpr')&&o.querySelector('#gdpr').checked);
     const L=cartLines(),good=L.filter(i=>!i.bad),sub=good.reduce((t,i)=>t+i.price*i.q,0),disc=promoA?(promoA.type==='pct'?Math.round(sub*promoA.value)/100:Math.min(promoA.value,sub)):0,total=Math.round((sub-disc)*100)/100;
     o.querySelector('.dlg').innerHTML='<h3>Coșul meu</h3>'+(L.length?
       L.map(i=>i.bad?
@@ -511,7 +522,7 @@ function cartView(){
         '<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+' × '+i.q+' = '+eur(i.price*i.q)+'</small><div style="display:flex;gap:10px;align-items:center;margin-top:8px">'+stepper(i.id)+'<button class="dng" data-rm="'+esc(i.id)+'">Elimină</button></div></div>').join('')+
       (good.length?
         '<label>Cod promoțional</label><div class="row"><input id="pc" placeholder="COD" value="'+esc(promoA?promoA.code:'')+'"><button type="button" id="pa">Aplică</button></div>'+(promoA?'<div class="note">Reducere ('+esc(promoA.code)+'): −'+eur(disc)+'</div>':'')+'<div class="box"><small>Total de plată</small><b>'+eur(total)+'</b></div>'+
-        '<label>Numele tău</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" placeholder="+40 712 345 678" value="'+esc(p0)+'">'+
+        '<label>Numele tău</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" placeholder="+40 712 345 678" value="'+esc(p0)+'">'+'<label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="gdpr" style="width:auto;margin-top:4px"'+(g0?' checked':'')+'><span>Sunt de acord ca numele și telefonul meu să fie folosite doar pentru a procesa această comandă.</span></label>'+
         '<div class="row"><button id="cl">Continuă cumpărăturile</button><button class="pri" id="ok">Comandă</button></div>'
         :'<div class="row"><button id="cl">Închide</button></div>')
       :'<p class="note">Coșul tău este gol.</p><div class="row"><button id="cl">Închide</button></div>');
@@ -524,10 +535,11 @@ function cartView(){
     if(ok)ok.onclick=async()=>{
       const name=o.querySelector('#n').value.trim(),phone=o.querySelector('#ph').value.trim();
       if(!name||!/^(\+|00)\d[\d\s.-]{7,}$/.test(phone)){alert('Trebuie numele tău și numărul de WhatsApp cu prefixul țării, de exemplu +40 712 345 678.');return;}
+      if(!o.querySelector('#gdpr').checked){alert('Trebuie să bifezi acordul pentru folosirea datelor.');return;}
       const ids=cart.filter(k=>good.some(g=>g.id===k));
       ok.disabled=true;ok.textContent='Se trimite…';
       try{
-        const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone,promo:promoA?promoA.code:''})});
+        const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone,promo:promoA?promoA.code:'',consent:true})});
         try{const m=myOrders();m.unshift(r.id);localStorage.setItem('myorders',JSON.stringify(m.slice(0,20)));}catch(e){}
         promoA=null;const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();bubDis='';refresh();refreshBubble();pay(good,total,name,phone,r.id);
       }catch(x){alert(x.message);await refresh();draw();}
@@ -568,30 +580,41 @@ function printOrder(x){
 
 function waNote(x){
   const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Bună '+x.name+', am primit comanda ta ('+oi(x).map(lno).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem târgul. Mulțumesc!';
+  const txt='Bună '+x.name+', am primit comanda ta ('+oi(x).map(lno).join(', ')+', total '+eur(ot(x))+') și am luat-o în considerare. Data viitoare când ne vedem facem târgul. Mulțumesc!\n\nUrmărește comanda: '+location.origin+'/?comanda='+x.id;
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
 function waLink(x){
   const st=S.settings,num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
-  const txt='Bună '+x.name+', mulțumim pentru comandă ('+oi(x).map(lno).join(', ')+').\nTotal de plată : '+eur(ot(x))+'\n\nTransfer către: '+(st.holder||'')+'\nIBAN : '+(st.iban||'(de completat)')+'\nDetalii plată: '+x.name+'\n\nSpune-mi când ai făcut-o, mulțumesc!';
+  const txt='Bună '+x.name+', mulțumim pentru comandă ('+oi(x).map(lno).join(', ')+').\nTotal de plată : '+eur(ot(x))+'\n\nTransfer către: '+(st.holder||'')+'\nIBAN : '+(st.iban||'(de completat)')+'\nDetalii plată: '+x.name+'\n\nSpune-mi când ai făcut-o, mulțumesc!\n\nUrmărește comanda: '+location.origin+'/?comanda='+x.id;
   return 'https://wa.me/'+num+'?text='+encodeURIComponent(txt);
 }
 
+const TPL=[['Comanda e pregătită','comanda ta este pregătită.'],['Stabilim întâlnirea','te rog să-mi spui când și unde ne putem vedea pentru predare.'],['Am primit plata','am primit plata, mulțumesc!'],['Comanda a fost predată','comanda a fost predată. Mulțumesc!'],['Memento plată','un mic memento: mai avem de primit plata comenzii.']];
+function waTpl(x,i){
+  const num=x.phone.replace(/[^\d+]/g,'').replace(/^\+/,'').replace(/^00/,'');
+  return 'https://wa.me/'+num+'?text='+encodeURIComponent('Bună '+x.name+', '+TPL[i][1]+'\n\nUrmărește comanda: '+location.origin+'/?comanda='+x.id);
+}
 function ordersView(){
-  const o=modal('');
+  const o=modal('');let fq='',ff='all';
+  o.querySelector('.dlg').innerHTML='<h3>Comenzi</h3><input id="oq" type="search" placeholder="Caută după nume sau telefon…"><select id="of2" style="margin-top:8px"><option value="all">Toate comenzile</option><option value="new">Noi (neconfirmate)</option><option value="unpaid">Neplătite</option><option value="todo">De predat</option></select><div id="ol"></div><div class="row"><button id="cl">Închide</button></div>';
+  o.querySelector('#cl').onclick=()=>o.remove();
+  o.querySelector('#oq').oninput=e=>{fq=e.target.value;draw();};
+  o.querySelector('#of2').onchange=e=>{ff=e.target.value;draw();};
+  const ok=x=>{const nq=norm(fq.trim()),stt=x.status||'new';return (!nq||norm(x.name+' '+x.phone).includes(nq))&&(ff==='all'||(ff==='new'&&stt==='new')||(ff==='unpaid'&&!x.paid)||(ff==='todo'&&stt!=='delivered'));};
   const draw=()=>{
-    const L=S.orders;
-    o.querySelector('.dlg').innerHTML='<h3>Comenzi</h3>'+(L.length?L.map(x=>
+    const L=S.orders.filter(ok);
+    o.querySelector('#ol').innerHTML=(L.length?L.map(x=>
      '<div class="box"><b>'+esc(oi(x).map(lno).join(', '))+' · '+eur(ot(x))+'</b><small>'+esc(x.name)+' · <a style="color:inherit" href="tel:'+esc(x.phone.replace(/[^\d+]/g,''))+'">'+esc(x.phone)+'</a></small><small>'+esc(new Date(x.date).toLocaleString('ro-RO'))+'</small>'+
      '<div class="row"><select data-st="'+esc(x.id)+'">'+[['new','Nouă'],['confirmed','Confirmată'],['ready','Pregătită'],['delivered','Predată']].map(([v,t])=>'<option value="'+v+'"'+((x.status||'new')===v?' selected':'')+'>'+t+'</option>').join('')+'</select></div><div class="row"><input data-nt="'+esc(x.id)+'" placeholder="Mesaj pentru client (apare pe pagina de urmărire)" value="'+esc(x.note||'')+'"></div>'+
      '<div class="row"><a class="btn pri" target="_blank" rel="noopener" href="'+esc(waLink(x))+'">💬 Trimite IBAN-ul pe WhatsApp</a></div>'+
      '<div class="row"><a class="btn" target="_blank" rel="noopener" href="'+esc(waNote(x))+'">💬 Mesaj: am luat comanda în considerare</a></div>'+
+     '<div class="row"><select data-wt="'+esc(x.id)+'"><option value="">Mesaj rapid…</option>'+TPL.map((t,i)=>'<option value="'+i+'">'+t[0]+'</option>').join('')+'</select></div>'+
      '<div class="row"><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" style="width:auto" data-paid="'+esc(x.id)+'"'+(x.paid?' checked':'')+'> Plătit</label><button data-pr="'+esc(x.id)+'">🖨️ PDF</button><button class="dng" data-rm="'+esc(x.id)+'">Șterge</button></div></div>').join('')
-     :'<p class="note">Nicio comandă deocamdată.</p>')+'<div class="row"><button id="cl">Închide</button></div>';
-    o.querySelector('#cl').onclick=()=>o.remove();
+     :'<p class="note">Nicio comandă deocamdată.</p>');
     o.querySelectorAll('[data-st]').forEach(sel=>sel.onchange=async()=>{try{await api('/api/orders/'+sel.dataset.st,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:sel.value})});await refresh();draw();}catch(e){alert(e.message);}});
     o.querySelectorAll('[data-nt]').forEach(i=>i.onchange=async()=>{try{await api('/api/orders/'+i.dataset.nt,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({note:i.value})});await refresh();}catch(e){alert(e.message);}});
+    o.querySelectorAll('[data-wt]').forEach(sel=>sel.onchange=()=>{const x=S.orders.find(y=>y.id===sel.dataset.wt);if(sel.value!==''&&x)window.open(waTpl(x,+sel.value),'_blank');sel.value='';});
     o.querySelectorAll('[data-pr]').forEach(b=>b.onclick=()=>printOrder(S.orders.find(x=>x.id===b.dataset.pr)));
     o.querySelectorAll('[data-paid]').forEach(c=>c.onchange=async()=>{
       try{await api('/api/orders/'+c.dataset.paid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({paid:c.checked})});await refresh();draw();}catch(e){alert(e.message);}});
@@ -778,13 +801,14 @@ function startLang(){
   trDom(document.body);
   obs.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['placeholder','title','aria-label']});
 }
-Object.assign(EX,{"Anunță-mă când revine":"Préviens-moi quand il revient","Trimite":"Envoyer","Mulțumim! Te vom anunța când articolul revine.":"Merci ! On te préviendra quand l'article revient.","Cod promoțional":"Code promo","Aplică":"Appliquer","Cod promoțional invalid sau expirat":"Code promo invalide ou expiré","Coduri promo":"Codes promo","Cod":"Code","Gunoi":"Corbeille","Coș de gunoi":"Corbeille","Gunoiul este gol.":"La corbeille est vide.","Restaurează":"Restaurer","Șterge definitiv":"Supprimer définitivement","Activ":"Actif","Sumă":"Montant","Valoare":"Valeur","Ultimul din stoc!":"Dernier en stock !","Stoc redus":"Stock limité","Doar favorite":"Seulement favoris","Listă de așteptare":"Liste d'attente","Anunță pe WhatsApp":"Prévenir sur WhatsApp","Procent (%) sau sumă fixă. „Max” = de câte ori poate fi folosit (0 = nelimitat).":"Pourcentage (%) ou montant fixe. « Max » = nombre d'utilisations possibles (0 = illimité).","Articolele șterse rămân aici 30 de zile, apoi dispar definitiv.":"Les articles supprimés restent ici 30 jours, puis disparaissent définitivement.","Ștergi definitiv acest articol?":"Supprimer définitivement cet article ?","Primită":"Reçue","Am primit comanda ta. Vânzătorul o va confirma în curând.":"Nous avons reçu ta commande. Le vendeur va bientôt la confirmer.","Comanda ta a fost confirmată.":"Ta commande a été confirmée.","Comanda ta este pregătită pentru predare.":"Ta commande est prête à être remise.","Comanda a fost predată. Mulțumim!":"La commande a été remise. Merci !","Pregătită":"Préparée","Comanda ta":"Ta commande","Comandă primită":"Commande reçue","Pregătită pentru predare":"Prête à remettre","Mesaj de la vânzător":"Message du vendeur","Înapoi la magazin":"Retour à la boutique","Contactează vânzătorul pe WhatsApp":"Contacter le vendeur sur WhatsApp","Starea se actualizează automat.":"Le statut se met à jour automatiquement.","Comanda nu a fost găsită.":"Commande introuvable.","Vezi starea comenzii":"Voir l'état de la commande","Urmărește comanda":"Suivre la commande","Trimite un e-mail de test":"Envoyer un e-mail de test","Mesaj pentru client (apare pe pagina de urmărire)":"Message pour le client (affiché sur la page de suivi)"});
+Object.assign(EX,{"Caută după nume sau telefon…":"Cherche par nom ou téléphone…","Toate comenzile":"Toutes les commandes","Noi (neconfirmate)":"Nouvelles (non confirmées)","De predat":"À remettre","Mesaj rapid…":"Message rapide…","Comanda e pregătită":"Commande prête","Stabilim întâlnirea":"Fixer le rendez-vous","Am primit plata":"Paiement reçu","Comanda a fost predată":"Commande remise","Memento plată":"Rappel de paiement","Vizualizate recent":"Vus récemment","Trebuie să bifezi acordul pentru folosirea datelor.":"Tu dois cocher l'accord pour l'utilisation des données.","Trebuie să accepți folosirea datelor pentru comandă.":"Tu dois accepter l'utilisation des données pour la commande.","Sunt de acord ca numele și telefonul meu să fie folosite doar pentru a procesa această comandă.":"J'accepte que mon nom et mon téléphone soient utilisés uniquement pour traiter cette commande.","Datele tale sunt folosite doar pentru a te anunța.":"Tes données ne servent qu'à te prévenir.","Anunță-mă când revine":"Préviens-moi quand il revient","Trimite":"Envoyer","Mulțumim! Te vom anunța când articolul revine.":"Merci ! On te préviendra quand l'article revient.","Cod promoțional":"Code promo","Aplică":"Appliquer","Cod promoțional invalid sau expirat":"Code promo invalide ou expiré","Coduri promo":"Codes promo","Cod":"Code","Gunoi":"Corbeille","Coș de gunoi":"Corbeille","Gunoiul este gol.":"La corbeille est vide.","Restaurează":"Restaurer","Șterge definitiv":"Supprimer définitivement","Activ":"Actif","Sumă":"Montant","Valoare":"Valeur","Ultimul din stoc!":"Dernier en stock !","Stoc redus":"Stock limité","Doar favorite":"Seulement favoris","Listă de așteptare":"Liste d'attente","Anunță pe WhatsApp":"Prévenir sur WhatsApp","Procent (%) sau sumă fixă. „Max” = de câte ori poate fi folosit (0 = nelimitat).":"Pourcentage (%) ou montant fixe. « Max » = nombre d'utilisations possibles (0 = illimité).","Articolele șterse rămân aici 30 de zile, apoi dispar definitiv.":"Les articles supprimés restent ici 30 jours, puis disparaissent définitivement.","Ștergi definitiv acest articol?":"Supprimer définitivement cet article ?","Primită":"Reçue","Am primit comanda ta. Vânzătorul o va confirma în curând.":"Nous avons reçu ta commande. Le vendeur va bientôt la confirmer.","Comanda ta a fost confirmată.":"Ta commande a été confirmée.","Comanda ta este pregătită pentru predare.":"Ta commande est prête à être remise.","Comanda a fost predată. Mulțumim!":"La commande a été remise. Merci !","Pregătită":"Préparée","Comanda ta":"Ta commande","Comandă primită":"Commande reçue","Pregătită pentru predare":"Prête à remettre","Mesaj de la vânzător":"Message du vendeur","Înapoi la magazin":"Retour à la boutique","Contactează vânzătorul pe WhatsApp":"Contacter le vendeur sur WhatsApp","Starea se actualizează automat.":"Le statut se met à jour automatiquement.","Comanda nu a fost găsită.":"Commande introuvable.","Vezi starea comenzii":"Voir l'état de la commande","Urmărește comanda":"Suivre la commande","Trimite un e-mail de test":"Envoyer un e-mail de test","Mesaj pentru client (apare pe pagina de urmărire)":"Message pour le client (affiché sur la page de suivi)"});
 PRE.push(['Mai sunt doar ','Plus que '],['Reducere (','Remise ('],['Folosit: ','Utilisé : ']);SUB.push([' în stoc',' en stock']);
 if(lang==='fr')startLang();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 initSearch();
 setInterval(refreshBubble,20000);
-refresh().then(()=>{refreshBubble();const P=new URLSearchParams(location.search),a=P.get('a'),c=P.get('comanda');if(a){const it=S.items.find(x=>x.id===a);if(it)openItem(it);}if(c)trackPage(c);});
+const hideSplash=()=>{const sp=document.getElementById('splash');if(sp){sp.classList.add('off');setTimeout(()=>sp.remove(),500);}};setTimeout(hideSplash,20000);
+refresh().then(()=>{hideSplash();refreshBubble();const P=new URLSearchParams(location.search),a=P.get('a'),c=P.get('comanda');if(a){const it=S.items.find(x=>x.id===a);if(it)openItem(it);}if(c)trackPage(c);});
 </script>
 </body>
 </html>
