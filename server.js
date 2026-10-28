@@ -153,7 +153,7 @@ app.get('/', wrap(async (req, res) => {
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa, about: d.settings.about, zone: d.settings.zone }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [] }); }));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa, about: d.settings.about, zone: d.settings.zone, vacation: !!d.settings.vacation, vacMsg: d.settings.vacMsg }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [] }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
@@ -166,7 +166,7 @@ app.post('/api/logout', (req, res) => { res.clearCookie('admin', { path: '/' });
 
 app.put('/api/settings', needAdmin, wrap(async (req, res) => {
   const d = await load(), s = req.body || {}, c = (v, n) => String(v || '').trim().slice(0, n);
-  d.settings = { shop: c(s.shop, 60) || 'Magazinul meu', holder: c(s.holder, 80), iban: c(s.iban, 40), wa: c(s.wa, 20), about: c(s.about, 1000), zone: c(s.zone, 100) };
+  d.settings = { shop: c(s.shop, 60) || 'Magazinul meu', holder: c(s.holder, 80), iban: c(s.iban, 40), wa: c(s.wa, 20), about: c(s.about, 1000), zone: c(s.zone, 100), vacation: !!s.vacation, vacMsg: c(s.vacMsg, 200) };
   await save(d); res.json(d.settings);
 }));
 
@@ -281,6 +281,7 @@ app.delete('/api/waitlist/:id', needAdmin, wrap(async (req, res) => { const d = 
 app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   const d = await load(), c = (v, n) => String(v || '').trim().slice(0, n);
   const name = c(req.body.name, 80), phone = c(req.body.phone, 30);
+  if (d.settings.vacation) return res.status(403).json({ error: d.settings.vacMsg || 'Magazinul este în vacanță. Nu se primesc comenzi acum.' });
   const raw = (Array.isArray(req.body.itemIds) ? req.body.itemIds.map(String) : []).slice(0, 200), counts = new Map();
   raw.forEach(k => counts.set(k, (counts.get(k) || 0) + 1));
   if (!counts.size) return res.status(400).json({ error: 'Coș gol' });
@@ -307,7 +308,12 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   const oid = crypto.randomBytes(6).toString('hex');
   d.orders.unshift({ id: oid, status: 'new', items, total: final, subtotal: total, discount, promo, consent: new Date().toISOString(), name, phone, date: new Date().toISOString(), paid: false });
   await save(d);
-  notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + final + ' €' + (promo ? ' (cod ' + promo + ')' : ''));
+  const LOW = parseInt(process.env.LOW_STOCK || '2'), low = [];
+  for (const i of items) {
+    const u = resolve(d, i.id), [iid, vid] = i.id.split(':'), it0 = d.items.find(x => x.id === iid), x0 = it0 && (vid ? (it0.variants || []).find(v => v.id === vid) : it0);
+    if (u && x0 && stock(x0) > 1 && u.left <= LOW) low.push(u.title + ' – ' + (u.left === 0 ? 'stoc epuizat' : 'mai sunt ' + u.left));
+  }
+  notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + final + ' €' + (promo ? ' (cod ' + promo + ')' : '') + (low.length ? '\n\n⚠️ Stoc redus:\n' + low.map(l => '• ' + l).join('\n') : ''));
   res.json({ ok: true, total: final, id: oid });
 }));
 
