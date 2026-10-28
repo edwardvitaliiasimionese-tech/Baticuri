@@ -139,7 +139,7 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const CUR='EUR'; // schimbă în 'RON' pentru lei
 const eur=n=>new Intl.NumberFormat('ro-RO',{style:'currency',currency:CUR}).format(n);
 let S={settings:{},items:[],orders:[],categories:[]},admin=false,cart=[];
-let q='',fcat='',fsub='',sopen=false,sortk='new',oa=false,ofv=false,promoA=null;
+let q='',fcat='',fsub='',sopen=false,sortk='new',oa=false,ofv=false,promoA=null,nouSession=new Set(),nouInit=false;
 let lang=(()=>{try{return localStorage.getItem('lang')==='fr'?'fr':'ro';}catch(e){return 'ro';}})();
 try{cart=JSON.parse(localStorage.getItem('cart')||'[]');}catch(e){}
 const saveCart=()=>{try{localStorage.setItem('cart',JSON.stringify(cart));}catch(e){}};
@@ -154,6 +154,7 @@ async function api(url,opt){
 async function refresh(){
   S=await api('/api/shop');admin=(await api('/api/me')).admin;S.orders=admin?await api('/api/orders'):[];
   const cnt={};cart=cart.filter(k=>{const u=unit(k);if(!u||u.sold||!(u.left>0))return true;cnt[k]=(cnt[k]||0)+1;return cnt[k]<=u.left;});saveCart();
+  if(!nouInit){nouInit=true;try{const seen=JSON.parse(localStorage.getItem('seenNou')||'[]'),nou=S.items.filter(i=>i.badge==='Nou').map(i=>i.id);nouSession=new Set(nou.filter(id=>!seen.includes(id)));localStorage.setItem('seenNou',JSON.stringify([...new Set([...seen,...nou])]));}catch(e){}}
   document.title=S.settings.shop;render();renderSearch();
 }
 function modal(html,lock){
@@ -173,7 +174,7 @@ function render(){
    '<header><h1>'+esc(st.shop)+'</h1>'+'<div class="bar"><button id="lang">'+(lang==='fr'?'RO':'FR')+'</button>'+(myOrders().length?'<button id="mine">Comenzile mele</button>':'')+'<button class="pri" id="cartb">🛒 Coș'+(cartCount()?' ('+cartCount()+')':'')+'</button>'+(admin?'<button class="pri" id="add">+ Articol</button><button id="ord">Comenzi'+(S.orders.filter(x=>!x.paid).length?' ('+S.orders.filter(x=>!x.paid).length+')':'')+'</button><button id="promos">Coduri promo</button><button id="trash">Gunoi</button><button id="stats">Statistici</button><button id="cats">Categorii</button><button id="set">Setări</button><button id="out">Deconectare</button>':'')+'</div>'+'</header>'+vacBanner();
   $('#rest').innerHTML='<div class="shop"><main>'+(shown().length?shown().map(it=>
     '<div class="card'+(it.sold||it.reserved?' sold':'')+'">'+(it.hidden?'<div class="nd top">Ascuns – doar tu îl vezi</div>':'')+(it.sold||it.reserved?'<div class="nd top">Articolul nu mai este disponibil</div>':(it.variants&&it.variants.some(v=>v.sold||v.reserved)?'<div class="nd top">Unele variante nu mai sunt disponibile</div>':''))+(it.imgs.length?'<div class="gal" data-open="'+esc(it.id)+'">'+it.imgs.map(s=>'<img loading="lazy" src="'+esc(s)+'" alt="">').join('')+'</div>':'<div class="nopic">Fără poză</div>')+
-    '<div class="body">'+'<div class="tr">'+(it.badge?'<span class="bdg">'+esc(it.badge)+'</span>':'<span></span>')+'<span class="fv" data-fav="'+esc(it.id)+'">'+(isFav(it.id)?'♥':'♡')+'</span></div>'+'<h2 data-open="'+esc(it.id)+'">'+sw(it.color)+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+(it.oldPrice?'<s class="old">'+eur(it.oldPrice)+'</s> ':'')+(it.variants&&it.variants.length?'de la ':'')+eur(it.price)+'</div>'+lowCard(it)+
+    '<div class="body">'+'<div class="tr">'+((it.badge&&(it.badge!=='Nou'||admin||nouSession.has(it.id)))?'<span class="bdg">'+esc(it.badge)+'</span>':'<span></span>')+'<span class="fv" data-fav="'+esc(it.id)+'">'+(isFav(it.id)?'♥':'♡')+'</span></div>'+'<h2 data-open="'+esc(it.id)+'">'+sw(it.color)+esc(it.title)+'</h2><p>'+esc(it.desc)+'</p><div class="price">'+(it.oldPrice?'<s class="old">'+eur(it.oldPrice)+'</s> ':'')+(it.variants&&it.variants.length?'de la ':'')+eur(it.price)+'</div>'+lowCard(it)+
     (it.sold?'<button disabled>Vândut</button>':it.reserved?'<button disabled>Indisponibil</button>':(it.variants&&it.variants.length)?'<button class="pri" data-open="'+esc(it.id)+'">Alege</button>':(qOf(it.id)?stepper(it.id):'<button class="pri" data-cart="'+esc(it.id)+'">＋ Coș</button>'))+
     (admin?'<button data-edit="'+esc(it.id)+'">Editează</button><button data-dup="'+esc(it.id)+'">Duplică</button><button data-hide="'+esc(it.id)+'">'+(it.hidden?'Arată':'Ascunde')+'</button><button class="dng" data-del="'+esc(it.id)+'">Șterge</button>':'')+'</div></div>').join('')
     :'<div class="empty">'+(q||fcat?'Niciun rezultat.':'Niciun articol deocamdată.')+'</div>')+'</main>'+sideHtml()+'</div>'+recentHtml();
@@ -240,7 +241,7 @@ const favs=()=>{try{return JSON.parse(localStorage.getItem('favs')||'[]');}catch
 const isFav=id=>favs().includes(id);
 const toggleFav=id=>{const f=favs(),i=f.indexOf(id);if(i>=0)f.splice(i,1);else f.push(id);try{localStorage.setItem('favs',JSON.stringify(f));}catch(e){}};
 const lowTxt=n=>n===1?'Ultimul din stoc!':'Mai sunt doar '+n+' în stoc';
-const lowCard=it=>it.variants&&it.variants.length?(!it.sold&&!it.reserved&&it.variants.some(v=>v.qty>1&&!v.sold&&!v.reserved&&v.left>0&&v.left<=2)?'<div class="low">Stoc redus</div>':''):(!it.sold&&!it.reserved&&it.qty>1&&it.left>0&&it.left<=2?'<div class="low">'+lowTxt(it.left)+'</div>':'');
+const lowCard=it=>!admin?'':it.variants&&it.variants.length?(!it.sold&&!it.reserved&&it.variants.some(v=>v.qty>1&&!v.sold&&!v.reserved&&v.left>0&&v.left<=2)?'<div class="low">Stoc redus</div>':''):(!it.sold&&!it.reserved&&it.qty>1&&it.left>0&&it.left<=2?'<div class="low">'+lowTxt(it.left)+'</div>':'');
 function shown(){
   const L=shown0().filter(it=>!oa||(!it.sold&&!it.reserved)).filter(it=>!ofv||isFav(it.id));
   return sortk==='asc'?[...L].sort((a,b)=>a.price-b.price):sortk==='desc'?[...L].sort((a,b)=>b.price-a.price):L;
@@ -455,8 +456,8 @@ function openItem(it){
     const V=it.variants||[];
     o.querySelector('.dlg').innerHTML=(!V.length&&(it.sold||it.reserved)?'<p class="nd">Articolul nu mai este disponibil</p>':'')+(it.imgs.length?'<div class="gal" style="border-radius:12px;margin-bottom:12px">'+it.imgs.map(s=>'<img src="'+esc(s)+'" alt="">').join('')+'</div>':'')+
       '<h3>'+sw(it.color)+esc(it.title)+'</h3><p style="white-space:pre-wrap;color:var(--mut)">'+esc(it.desc)+'</p>'+
-      (V.length?V.map(v=>'<div class="box" style="display:flex;gap:10px;align-items:flex-start">'+(v.img?'<img class="vimg" src="'+esc(v.img)+'" alt="">':'')+'<div style="flex:1">'+((v.sold||v.reserved)?'<div class="nd">Varianta nu mai este disponibilă</div>':'')+'<b>'+sw(v.color)+esc(v.name)+'</b><small>'+eur(v.price)+(v.qty>1&&!v.sold&&!v.reserved?(v.left<=2?' · '+lowTxt(v.left):' · disponibile: '+v.left):'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div></div>').join('')
-       :''+(it.qty>1&&!it.sold&&!it.reserved?(it.left<=2?'<p class="low">'+lowTxt(it.left)+'</p>':'<p class="note">Disponibile: '+it.left+' buc.</p>'):'')+'<div class="price" style="font-size:1.3rem">'+(it.oldPrice?'<s class="old">'+eur(it.oldPrice)+'</s> ':'')+eur(it.price)+'</div><div class="row">'+btn(it.id,it.sold,it.reserved)+'</div>')+
+      (V.length?V.map(v=>'<div class="box" style="display:flex;gap:10px;align-items:flex-start">'+(v.img?'<img class="vimg" src="'+esc(v.img)+'" alt="">':'')+'<div style="flex:1">'+((v.sold||v.reserved)?'<div class="nd">Varianta nu mai este disponibilă</div>':'')+'<b>'+sw(v.color)+esc(v.name)+'</b><small>'+eur(v.price)+(v.qty>1&&!v.sold&&!v.reserved?(v.left<=2?(admin?' · '+lowTxt(v.left):''):' · disponibile: '+v.left):'')+'</small><div style="margin-top:8px">'+btn(it.id+':'+v.id,v.sold,v.reserved)+'</div></div></div>').join('')
+       :''+(it.qty>1&&!it.sold&&!it.reserved?(it.left<=2?(admin?'<p class="low">'+lowTxt(it.left)+'</p>':''):'<p class="note">Disponibile: '+it.left+' buc.</p>'):'')+'<div class="price" style="font-size:1.3rem">'+(it.oldPrice?'<s class="old">'+eur(it.oldPrice)+'</s> ':'')+eur(it.price)+'</div><div class="row">'+btn(it.id,it.sold,it.reserved)+'</div>')+
       '<div class="row"><button id="sh">Partajează</button><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
     o.querySelector('#sh').onclick=()=>{const u=location.origin+'/?a='+it.id;if(navigator.share)navigator.share({title:it.title,url:u}).catch(()=>{});else window.open('https://wa.me/?text='+encodeURIComponent(it.title+' '+u),'_blank');};
