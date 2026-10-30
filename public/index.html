@@ -388,24 +388,25 @@ function lowList(){
 }
 const pushOk=()=>('serviceWorker' in navigator)&&('PushManager' in window)&&('Notification' in window);
 function b64(k){const p='='.repeat((4-k.length%4)%4),r=atob((k+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...r].map(c=>c.charCodeAt(0)));}
-async function pushSub(){const reg=await navigator.serviceWorker.ready;return reg.pushManager.getSubscription();}
+const withTimeout=(p,ms,m)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error(m)),ms))]);
+async function pushSub(){const reg=await withTimeout(navigator.serviceWorker.ready,4000,'Serviciul de notificări nu este pornit. Reîncarcă pagina.');return reg.pushManager.getSubscription();}
 const JH={'Content-Type':'application/json'};
 async function pushOn(){
   const perm=await Notification.requestPermission();
   if(perm!=='granted')throw new Error('Notificările sunt blocate. Activează-le din setările browserului sau ale telefonului.');
-  const reg=await navigator.serviceWorker.ready,{key}=await api('/api/push/key');
-  const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(key)});
+  const reg=await withTimeout(navigator.serviceWorker.ready,5000,'Serviciul de notificări nu este pornit. Reîncarcă pagina și încearcă din nou.'),{key}=await api('/api/push/key');
+  let sub;try{sub=await withTimeout(reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(key)}),20000,'Telefonul nu a răspuns. Verifică conexiunea și încearcă din nou.');}catch(e){throw new Error('Nu s-au putut activa notificările: '+(e.message||e.name));}
   await api('/api/push/subscribe',{method:'POST',headers:JH,body:JSON.stringify({subscription:sub.toJSON(),orders:myOrders()})});
 }
 async function pushOff(){const s=await pushSub();if(s){try{await api('/api/push/unsubscribe',{method:'POST',headers:JH,body:JSON.stringify({endpoint:s.endpoint})});}catch(e){}await s.unsubscribe();}}
 async function pushSync(){try{if(!pushOk())return;const s=await pushSub();if(s)await api('/api/push/subscribe',{method:'POST',headers:JH,body:JSON.stringify({subscription:s.toJSON(),orders:myOrders()})});}catch(e){}}
 function pushView(){
-  const o=modal('');
+  const o=modal('<h3>Notificări</h3><p class="note">Se încarcă…</p>');
   const draw=async()=>{
     const ok=pushOk();let s=null;try{s=ok?await pushSub():null;}catch(e){}
     const perm=ok?Notification.permission:'denied';
     o.querySelector('.dlg').innerHTML='<h3>Notificări</h3>'+(!ok?'<p class="note">Acest browser nu permite notificările. Pe iPhone, adaugă mai întâi site-ul pe ecranul principal (Partajează → Adaugă pe ecranul principal) și deschide-l de acolo.</p>':
-      '<p class="note">'+(admin?'Primești o notificare la fiecare comandă nouă.':'Primești noutăți (articole noi) și starea comenzii tale când se schimbă.')+'</p><div class="box"><small>Stare</small><b>'+(s?'Activate':perm==='denied'?'Blocate în browser':'Dezactivate')+'</b></div><div class="row">'+(s?'<button id="pf">Dezactivează</button><button class="pri" id="pt">Trimite o notificare de test</button>':'<button class="pri" id="pn">Activează notificările</button>')+'</div>')+'<div class="row"><button id="cl">Închide</button></div>';
+      '<p class="note">Browser: '+(ok?'compatibil':'necompatibil')+' · Permisiune: '+perm+'</p><p class="note">'+(admin?'Primești o notificare la fiecare comandă nouă.':'Primești noutăți (articole noi) și starea comenzii tale când se schimbă.')+'</p><div class="box"><small>Stare</small><b>'+(s?'Activate':perm==='denied'?'Blocate în browser':'Dezactivate')+'</b></div><div class="row">'+(s?'<button id="pf">Dezactivează</button><button class="pri" id="pt">Trimite o notificare de test</button>':'<button class="pri" id="pn">Activează notificările</button>')+'</div>')+'<div class="row"><button id="cl">Închide</button></div>';
     o.querySelector('#cl').onclick=()=>o.remove();
     const pn=o.querySelector('#pn');if(pn)pn.onclick=async()=>{try{await pushOn();}catch(e){alert(e.message);}draw();};
     const pf=o.querySelector('#pf');if(pf)pf.onclick=async()=>{try{await pushOff();}catch(e){alert(e.message);}draw();};
