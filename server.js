@@ -1,4 +1,5 @@
-const webpush = require('web-push');
+let webpush = null;
+try { webpush = require('web-push'); } catch (e) { console.error('Pachetul web-push lipsește, notificările sunt oprite:', e.message); }
 const express = require('express'), multer = require('multer'), crypto = require('crypto'), path = require('path');
 
 const PORT = process.env.PORT || 3000;
@@ -110,7 +111,7 @@ const applyVariantImages = async (req, variants) => {
 };
 
 async function pushTo(d, pred, payload) {
-  if (!d.vapid || !d.subs || !d.subs.length) return;
+  if (!webpush || !d.vapid || !d.subs || !d.subs.length) return;
   const list = d.subs.filter(pred); if (!list.length) return;
   const subj = process.env.PUSH_SUBJECT || 'mailto:' + (String(process.env.NOTIFY_EMAIL || '').split(/[,;\s]+/)[0] || 'admin@example.com');
   webpush.setVapidDetails(subj, d.vapid.publicKey, d.vapid.privateKey);
@@ -347,11 +348,13 @@ app.put('/api/items/:id/hidden', needAdmin, wrap(async (req, res) => {
 app.post('/api/test-email', needAdmin, wrap(async (req, res) => res.json(await notify('✅ Test e-mail de la magazin\nDacă primești acest mesaj, alertele de comandă funcționează.'))));
 
 app.get('/api/push/key', limiter(120, 3600e3), wrap(async (req, res) => {
+  if (!webpush) return res.status(503).json({ error: 'Notificările nu sunt disponibile pe server (pachetul web-push lipsește).' });
   const d = await load();
   if (!d.vapid) { d.vapid = webpush.generateVAPIDKeys(); await save(d); }
   res.json({ key: d.vapid.publicKey });
 }));
 app.post('/api/push/subscribe', limiter(60, 3600e3), wrap(async (req, res) => {
+  if (!webpush) return res.status(503).json({ error: 'Notificările nu sunt disponibile pe server (pachetul web-push lipsește).' });
   const d = await load(), sub = req.body.subscription || {}, k = sub.keys || {};
   if (!d.vapid || typeof sub.endpoint !== 'string' || !/^https:\/\//.test(sub.endpoint) || typeof k.p256dh !== 'string' || typeof k.auth !== 'string') return res.status(400).json({ error: 'Abonare invalidă' });
   const orders = (Array.isArray(req.body.orders) ? req.body.orders : []).map(String).slice(0, 50);
@@ -364,6 +367,7 @@ app.post('/api/push/unsubscribe', limiter(60, 3600e3), wrap(async (req, res) => 
   const d = await load(); d.subs = d.subs.filter(x => x.endpoint !== String(req.body.endpoint || '')); await save(d); res.json({ ok: true });
 }));
 app.post('/api/push/test', limiter(20, 3600e3), wrap(async (req, res) => {
+  if (!webpush) return res.status(503).json({ error: 'Notificările nu sunt disponibile pe server (pachetul web-push lipsește).' });
   const d = await load(), ep = String(req.body.endpoint || '');
   if (!d.subs.some(x => x.endpoint === ep)) return res.status(404).json({ error: 'Nu ești abonat la notificări' });
   await pushTo(d, x => x.endpoint === ep, { title: '🔔 Test notificare', body: 'Notificările funcționează!', tag: 'test', url: '/' });
