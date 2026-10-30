@@ -1,3 +1,4 @@
+const webpush = require('web-push');
 const express = require('express'), multer = require('multer'), crypto = require('crypto'), path = require('path');
 
 const PORT = process.env.PORT || 3000;
@@ -15,7 +16,7 @@ const DEFAULT = () => ({ settings: { shop: 'Magazinul meu', holder: '', iban: ''
 const HASH = x => crypto.createHash('sha256').update(x + KEY).digest('hex').slice(0, 24);
 const DBN = 'db-' + HASH('db') + '.json';
 let legacyGone = false, lastBackup = '';
-const fixDb = d => { d.orders = d.orders || []; d.categories = d.categories || []; d.promos = d.promos || []; d.waitlist = d.waitlist || []; d.trash = d.trash || []; return d; };
+const fixDb = d => { d.orders = d.orders || []; d.categories = d.categories || []; d.promos = d.promos || []; d.waitlist = d.waitlist || []; d.trash = d.trash || []; d.subs = d.subs || []; return d; };
 async function load() {
   let r = await fetch(`${OBJ}/${BUCKET}/${DBN}?t=${Date.now()}`, { headers: H() });
   if (!r.ok && (r.status === 400 || r.status === 404)) r = await fetch(`${OBJ}/${BUCKET}/db.json?t=${Date.now()}`, { headers: H() });
@@ -108,6 +109,18 @@ const applyVariantImages = async (req, variants) => {
   for (let k = 0; k < files.length; k++) { const v = variants[+idx[k]]; if (v) v.img = await putImage(files[k]); }
 };
 
+async function pushTo(d, pred, payload) {
+  if (!d.vapid || !d.subs || !d.subs.length) return;
+  const list = d.subs.filter(pred); if (!list.length) return;
+  const subj = process.env.PUSH_SUBJECT || 'mailto:' + (String(process.env.NOTIFY_EMAIL || '').split(/[,;\s]+/)[0] || 'admin@example.com');
+  webpush.setVapidDetails(subj, d.vapid.publicKey, d.vapid.privateKey);
+  const dead = [];
+  await Promise.all(list.map(async x => {
+    try { await webpush.sendNotification({ endpoint: x.endpoint, keys: x.keys }, JSON.stringify(payload)); }
+    catch (e) { if (e.statusCode === 404 || e.statusCode === 410) dead.push(x.endpoint); else console.error('Push:', e.statusCode, e.body); }
+  }));
+  if (dead.length) { const f = await load(); f.subs = f.subs.filter(x => !dead.includes(x.endpoint)); await save(f); }
+}
 const notify = async text => {
   const k = process.env.RESEND_API_KEY, list = String(process.env.NOTIFY_EMAIL || '').split(/[,;\s]+/).filter(Boolean);
   const bk = process.env.BREVO_API_KEY, bs = process.env.BREVO_SENDER;
@@ -181,7 +194,8 @@ app.post('/api/items', needAdmin, vfields, wrap(async (req, res) => {
   await applyVariantImages(req, variants);
   const d = await load();
   const item = { id: crypto.randomBytes(6).toString('hex'), title, desc: String(req.body.desc || '').trim().slice(0, 2000), price, imgs, ...catOk(d, req.body.cat, req.body.sub), color: hex(req.body.color), badge: bd(req.body.badge), oldPrice: op(req.body.oldPrice), qty: qn(req.body.qty), variants: variants.length ? variants : undefined };
-  d.items.unshift(item); await save(d); res.json(item);
+  d.items.unshift(item); await save(d);
+  if (!item.hidden) pushTo(d, x => x.role === 'customer', { title: '✨ Articol nou', body: item.title + ' – ' + item.price + ' €', tag: 'new-items', url: '/?a=' + item.id }).catch(() => {}); res.json(item);
 }));
 
 app.put('/api/items/:id', needAdmin, vfields, wrap(async (req, res) => {
@@ -314,6 +328,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
     if (u && x0 && stock(x0) > 1 && u.left <= LOW) low.push(u.title + ' – ' + (u.left === 0 ? 'stoc epuizat' : 'mai sunt ' + u.left));
   }
   notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + final + ' €' + (promo ? ' (cod ' + promo + ')' : '') + (low.length ? '\n\n⚠️ Stoc redus:\n' + low.map(l => '• ' + l).join('\n') : ''));
+  pushTo(d, x => x.role === 'admin', { title: '🛒 Comandă nouă', body: name + ' – ' + final + ' €', tag: 'order', url: '/' }).catch(() => {});
   res.json({ ok: true, total: final, id: oid });
 }));
 
@@ -330,6 +345,30 @@ app.put('/api/items/:id/hidden', needAdmin, wrap(async (req, res) => {
 }));
 
 app.post('/api/test-email', needAdmin, wrap(async (req, res) => res.json(await notify('✅ Test e-mail de la magazin\nDacă primești acest mesaj, alertele de comandă funcționează.'))));
+
+app.get('/api/push/key', limiter(120, 3600e3), wrap(async (req, res) => {
+  const d = await load();
+  if (!d.vapid) { d.vapid = webpush.generateVAPIDKeys(); await save(d); }
+  res.json({ key: d.vapid.publicKey });
+}));
+app.post('/api/push/subscribe', limiter(60, 3600e3), wrap(async (req, res) => {
+  const d = await load(), sub = req.body.subscription || {}, k = sub.keys || {};
+  if (!d.vapid || typeof sub.endpoint !== 'string' || !/^https:\/\//.test(sub.endpoint) || typeof k.p256dh !== 'string' || typeof k.auth !== 'string') return res.status(400).json({ error: 'Abonare invalidă' });
+  const orders = (Array.isArray(req.body.orders) ? req.body.orders : []).map(String).slice(0, 50);
+  const role = isAdmin(req) ? 'admin' : 'customer', ex = d.subs.find(x => x.endpoint === sub.endpoint);
+  if (ex) { ex.keys = { p256dh: k.p256dh, auth: k.auth }; ex.role = role; ex.orders = [...new Set([...(ex.orders || []), ...orders])].slice(0, 50); }
+  else { if (d.subs.length >= 2000) return res.status(429).json({ error: 'Prea multe abonări' }); d.subs.push({ endpoint: sub.endpoint, keys: { p256dh: k.p256dh, auth: k.auth }, role, orders, created: new Date().toISOString() }); }
+  await save(d); res.json({ ok: true, role });
+}));
+app.post('/api/push/unsubscribe', limiter(60, 3600e3), wrap(async (req, res) => {
+  const d = await load(); d.subs = d.subs.filter(x => x.endpoint !== String(req.body.endpoint || '')); await save(d); res.json({ ok: true });
+}));
+app.post('/api/push/test', limiter(20, 3600e3), wrap(async (req, res) => {
+  const d = await load(), ep = String(req.body.endpoint || '');
+  if (!d.subs.some(x => x.endpoint === ep)) return res.status(404).json({ error: 'Nu ești abonat la notificări' });
+  await pushTo(d, x => x.endpoint === ep, { title: '🔔 Test notificare', body: 'Notificările funcționează!', tag: 'test', url: '/' });
+  res.json({ ok: true });
+}));
 
 app.get('/api/backup', needAdmin, wrap(async (req, res) => {
   const d = await load();
@@ -352,7 +391,11 @@ app.get('/api/orders', needAdmin, wrap(async (req, res) => res.json((await load(
 app.put('/api/orders/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Negăsit' });
+  const prevS = o.status || 'new', prevP = !!o.paid;
   if (req.body.paid !== undefined) o.paid = !!req.body.paid; if (['new', 'confirmed', 'ready', 'delivered'].includes(req.body.status)) o.status = req.body.status; if (typeof req.body.note === 'string') o.note = req.body.note.slice(0, 300); sync(d); await save(d); res.json(o);
+  const msgs = { confirmed: 'Comanda ta a fost confirmată.', ready: 'Comanda ta este pregătită pentru predare.', delivered: 'Comanda a fost predată. Mulțumim!' };
+  const text = (o.status || 'new') !== prevS && msgs[o.status] ? msgs[o.status] : (o.paid && !prevP ? 'Plata a fost confirmată ✓' : '');
+  if (text) pushTo(d, x => (x.orders || []).includes(o.id), { title: 'Comanda ta', body: text, tag: 'ord-' + o.id, url: '/?comanda=' + o.id }).catch(() => {});
 }));
 
 app.delete('/api/orders/:id', needAdmin, wrap(async (req, res) => {
