@@ -196,7 +196,7 @@ app.post('/api/items', needAdmin, vfields, wrap(async (req, res) => {
   const d = await load();
   const item = { id: crypto.randomBytes(6).toString('hex'), title, desc: String(req.body.desc || '').trim().slice(0, 2000), price, imgs, ...catOk(d, req.body.cat, req.body.sub), color: hex(req.body.color), badge: bd(req.body.badge), oldPrice: op(req.body.oldPrice), qty: qn(req.body.qty), variants: variants.length ? variants : undefined };
   d.items.unshift(item); await save(d);
-  if (!item.hidden) pushTo(d, x => x.role === 'customer', { title: '✨ Articol nou', body: item.title + ' – ' + item.price + ' €', tag: 'new-items', url: '/?a=' + item.id }).catch(() => {}); res.json(item);
+  if (!item.hidden) pushTo(d, () => true, { title: '✨ Articol nou', body: item.title + ' – ' + item.price + ' €', tag: 'new-items', url: '/?a=' + item.id }).catch(() => {}); res.json(item);
 }));
 
 app.put('/api/items/:id', needAdmin, vfields, wrap(async (req, res) => {
@@ -329,7 +329,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
     if (u && x0 && stock(x0) > 1 && u.left <= LOW) low.push(u.title + ' – ' + (u.left === 0 ? 'stoc epuizat' : 'mai sunt ' + u.left));
   }
   notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + final + ' €' + (promo ? ' (cod ' + promo + ')' : '') + (low.length ? '\n\n⚠️ Stoc redus:\n' + low.map(l => '• ' + l).join('\n') : ''));
-  pushTo(d, x => x.role === 'admin', { title: '🛒 Comandă nouă', body: name + ' – ' + final + ' €', tag: 'order', url: '/' }).catch(() => {});
+  pushTo(d, x => x.role === 'admin' && Date.now() - (x.adminAt || 0) < 30 * 864e5, { title: '🛒 Comandă nouă', body: name + ' – ' + final + ' €', tag: 'order', url: '/' }).catch(() => {});
   res.json({ ok: true, total: final, id: oid });
 }));
 
@@ -359,8 +359,8 @@ app.post('/api/push/subscribe', limiter(60, 3600e3), wrap(async (req, res) => {
   if (!d.vapid || typeof sub.endpoint !== 'string' || !/^https:\/\//.test(sub.endpoint) || typeof k.p256dh !== 'string' || typeof k.auth !== 'string') return res.status(400).json({ error: 'Abonare invalidă' });
   const orders = (Array.isArray(req.body.orders) ? req.body.orders : []).map(String).slice(0, 50);
   const role = isAdmin(req) ? 'admin' : 'customer', ex = d.subs.find(x => x.endpoint === sub.endpoint);
-  if (ex) { ex.keys = { p256dh: k.p256dh, auth: k.auth }; ex.role = role; ex.orders = [...new Set([...(ex.orders || []), ...orders])].slice(0, 50); }
-  else { if (d.subs.length >= 2000) return res.status(429).json({ error: 'Prea multe abonări' }); d.subs.push({ endpoint: sub.endpoint, keys: { p256dh: k.p256dh, auth: k.auth }, role, orders, created: new Date().toISOString() }); }
+  if (ex) { ex.keys = { p256dh: k.p256dh, auth: k.auth }; ex.role = role; ex.adminAt = role === 'admin' ? Date.now() : 0; ex.orders = [...new Set([...(ex.orders || []), ...orders])].slice(0, 50); }
+  else { if (d.subs.length >= 2000) return res.status(429).json({ error: 'Prea multe abonări' }); d.subs.push({ endpoint: sub.endpoint, keys: { p256dh: k.p256dh, auth: k.auth }, role, adminAt: role === 'admin' ? Date.now() : 0, orders, created: new Date().toISOString() }); }
   await save(d); res.json({ ok: true, role });
 }));
 app.post('/api/push/unsubscribe', limiter(60, 3600e3), wrap(async (req, res) => {
