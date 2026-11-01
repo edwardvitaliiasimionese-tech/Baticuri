@@ -300,7 +300,6 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   const raw = (Array.isArray(req.body.itemIds) ? req.body.itemIds.map(String) : []).slice(0, 200), counts = new Map();
   raw.forEach(k => counts.set(k, (counts.get(k) || 0) + 1));
   if (!counts.size) return res.status(400).json({ error: 'Coș gol' });
-  if (!req.body.consent) return res.status(400).json({ error: 'Trebuie să accepți folosirea datelor pentru comandă.' });
   if (!name || phone.length < 3) return res.status(400).json({ error: 'Numele și telefonul sunt obligatorii' });
   const items = [];
   for (const [id, n] of counts) {
