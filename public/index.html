@@ -184,6 +184,17 @@ h1{background:linear-gradient(90deg,var(--pk),var(--ac),var(--pk));-webkit-backg
 .price{color:var(--pk)}
 .starsel{font-size:2.4rem;letter-spacing:.18em;cursor:pointer;text-align:center}.starsel span{color:rgba(244,114,182,.3)}.starsel span.on{color:#f472b6}
 .stars{color:#f472b6;letter-spacing:.1em}
+/* petites cartes + photos aux coins arrondis */
+main{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:18px 8px}
+.card .gal{border-radius:16px}
+.card .gal img,.nopic{aspect-ratio:1/1}
+.nopic{border-radius:16px}
+.body{padding:8px 0 0;gap:4px}
+.body h2{font-size:.8rem}
+.price{font-size:.9rem}
+.body button{font-size:.55rem;padding:7px 3px;letter-spacing:.06em}
+.card .nd.top{font-size:.55rem;border-radius:10px 10px 0 0}
+@media(min-width:700px){main{grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:24px 12px}.body h2{font-size:.9rem}.price{font-size:1rem}.body button{font-size:.6rem}}
 </style>
 </head>
 <body>
