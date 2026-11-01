@@ -17,7 +17,7 @@ const DEFAULT = () => ({ settings: { shop: 'Magazinul meu', holder: '', iban: ''
 const HASH = x => crypto.createHash('sha256').update(x + KEY).digest('hex').slice(0, 24);
 const DBN = 'db-' + HASH('db') + '.json';
 let legacyGone = false, lastBackup = '';
-const fixDb = d => { d.orders = d.orders || []; d.categories = d.categories || []; d.promos = d.promos || []; d.waitlist = d.waitlist || []; d.trash = d.trash || []; d.subs = d.subs || []; return d; };
+const fixDb = d => { d.orders = d.orders || []; d.categories = d.categories || []; d.promos = d.promos || []; d.waitlist = d.waitlist || []; d.trash = d.trash || []; d.subs = d.subs || []; d.reviews = d.reviews || []; return d; };
 async function load() {
   let r = await fetch(`${OBJ}/${BUCKET}/${DBN}?t=${Date.now()}`, { headers: H() });
   if (!r.ok && (r.status === 400 || r.status === 404)) r = await fetch(`${OBJ}/${BUCKET}/db.json?t=${Date.now()}`, { headers: H() });
@@ -85,7 +85,7 @@ const resolve = (d, key) => {
 };
 const hex = c => /^#[0-9a-f]{6}$/i.test(String(c || '')) ? String(c) : '';
 const catOk = (d, c, sb) => { const cat = (d.categories || []).find(x => x.id === String(c || '')); return cat ? { cat: cat.id, sub: (cat.subs || []).some(x => x.id === String(sb || '')) ? String(sb) : undefined } : {}; };
-const bd = b => ['Nou', 'Reducere', 'Recomandat'].includes(b) ? b : undefined;
+const bd = b => ['Nou', 'Reducere', 'Recomandat', 'Ediție limitată', 'Ultimul exemplar'].includes(b) ? b : undefined;
 const op = v => parseFloat(v) > 0 ? Math.round(parseFloat(v) * 100) / 100 : undefined;
 const qn = x => Math.max(1, Math.min(999, parseInt(x) || 1));
 const parseVariants = (raw, old) => {
@@ -151,23 +151,23 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '50kb' }));
 app.get('/manifest.webmanifest', wrap(async (req, res) => {
-  let n = 'Magazin'; try { n = (await load()).settings.shop; } catch (e) {}
-  res.type('application/manifest+json').json({ name: n, short_name: n.slice(0, 12), start_url: '/', display: 'standalone', background_color: '#f472b6', theme_color: '#f472b6', icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] });
+  let n = 'Magazin', col = '#0a0a0a'; try { const st0 = (await load()).settings; n = st0.shop; col = { ivory: '#fbf7f1', noir: '#0a0a0a', bordeaux: '#2c0711' }[st0.theme] || col; } catch (e) {}
+  res.type('application/manifest+json').json({ name: n, short_name: n.slice(0, 12), start_url: '/', display: 'standalone', background_color: col, theme_color: col, icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] });
 }));
 app.get('/', wrap(async (req, res) => {
-  let shop = 'Magazin', title = 'Magazin', desc = 'Comandă direct de aici.', img = '';
+  let theme = 'noir', shop = 'Magazin', title = 'Magazin', desc = 'Comandă direct de aici.', img = '';
   try {
-    const d = await load(); title = shop = d.settings.shop;
+    const d = await load(); title = shop = d.settings.shop; theme = d.settings.theme || 'noir';
     const it = d.items.find(x => x.id === req.query.a && !x.hidden);
     if (it) { title = it.title + ' – ' + d.settings.shop; desc = it.price + ' €' + (it.desc ? ' · ' + it.desc.slice(0, 120) : ''); img = it.imgs[0] || (it.variants || []).map(v => v.img).find(Boolean) || ''; }
     else { const f = d.items.find(x => !x.hidden && x.imgs[0]); img = f ? f.imgs[0] : ''; }
   } catch (e) {}
   const tags = '<meta property="og:title" content="' + eh(title) + '"><meta property="og:description" content="' + eh(desc) + '"><meta property="og:type" content="website">' + (img ? '<meta property="og:image" content="' + eh(img) + '">' : '') + '<meta name="twitter:card" content="summary_large_image">';
-  res.type('html').send(INDEX.replace('</head>', () => tags + '</head>').replace('__SHOP__', () => eh(shop)));
+  res.type('html').send(INDEX.replace('</head>', () => tags + '</head>').replace('__SHOP__', () => eh(shop)).replace('<html lang="ro">', () => '<html lang="ro" data-theme="' + (['ivory', 'noir', 'bordeaux'].includes(theme) ? theme : 'noir') + '">'));
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa, about: d.settings.about, zone: d.settings.zone, vacation: !!d.settings.vacation, vacMsg: d.settings.vacMsg }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [] }); }));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa, about: d.settings.about, zone: d.settings.zone, vacation: !!d.settings.vacation, vacMsg: d.settings.vacMsg, theme: d.settings.theme || 'noir', reviews: d.settings.reviews }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [] }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
@@ -180,7 +180,7 @@ app.post('/api/logout', (req, res) => { res.clearCookie('admin', { path: '/' });
 
 app.put('/api/settings', needAdmin, wrap(async (req, res) => {
   const d = await load(), s = req.body || {}, c = (v, n) => String(v || '').trim().slice(0, n);
-  d.settings = { shop: c(s.shop, 60) || 'Magazinul meu', holder: c(s.holder, 80), iban: c(s.iban, 40), wa: c(s.wa, 20), about: c(s.about, 1000), zone: c(s.zone, 100), vacation: !!s.vacation, vacMsg: c(s.vacMsg, 200) };
+  d.settings = { shop: c(s.shop, 60) || 'Magazinul meu', holder: c(s.holder, 80), iban: c(s.iban, 40), wa: c(s.wa, 20), about: c(s.about, 1000), zone: c(s.zone, 100), vacation: !!s.vacation, vacMsg: c(s.vacMsg, 200), theme: ['ivory', 'noir', 'bordeaux'].includes(s.theme) ? s.theme : 'noir', reviews: c(s.reviews, 1500) };
   await save(d); res.json(d.settings);
 }));
 
@@ -321,14 +321,14 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   }
   const final = Math.round((total - discount) * 100) / 100;
   const oid = crypto.randomBytes(6).toString('hex');
-  d.orders.unshift({ id: oid, status: 'new', items, total: final, subtotal: total, discount, promo, consent: new Date().toISOString(), name, phone, date: new Date().toISOString(), paid: false });
+  d.orders.unshift({ id: oid, status: 'new', items, total: final, subtotal: total, discount, promo, consent: new Date().toISOString(), gift: !!req.body.gift, giftNote: String(req.body.giftNote || '').slice(0, 200), name, phone, date: new Date().toISOString(), paid: false });
   await save(d);
   const LOW = parseInt(process.env.LOW_STOCK || '2'), low = [];
   for (const i of items) {
     const u = resolve(d, i.id), [iid, vid] = i.id.split(':'), it0 = d.items.find(x => x.id === iid), x0 = it0 && (vid ? (it0.variants || []).find(v => v.id === vid) : it0);
     if (u && x0 && stock(x0) > 1 && u.left <= LOW) low.push(u.title + ' – ' + (u.left === 0 ? 'stoc epuizat' : 'mai sunt ' + u.left));
   }
-  notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + final + ' €' + (promo ? ' (cod ' + promo + ')' : '') + (low.length ? '\n\n⚠️ Stoc redus:\n' + low.map(l => '• ' + l).join('\n') : ''));
+  notify('🛒 Comandă nouă de la ' + name + ' (' + phone + ')\n' + items.map(i => i.title + (i.qty > 1 ? ' ×' + i.qty : '')).join(', ') + '\nTotal: ' + final + ' €' + (promo ? ' (cod ' + promo + ')' : '') + (req.body.gift ? '\n🎁 Ambalaj cadou' + (req.body.giftNote ? ': ' + String(req.body.giftNote).slice(0, 200) : '') : '') + (low.length ? '\n\n⚠️ Stoc redus:\n' + low.map(l => '• ' + l).join('\n') : ''));
   pushTo(d, x => x.role === 'admin' && Date.now() - (x.adminAt || 0) < 30 * 864e5, { title: '🛒 Comandă nouă', body: name + ' – ' + final + ' €', tag: 'order', url: '/' }).catch(() => {});
   res.json({ ok: true, total: final, id: oid });
 }));
@@ -336,7 +336,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
 app.get('/api/orders/:id/track', limiter(3000, 3600e3), wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Negăsit' });
-  res.json({ status: o.status || 'new', paid: !!o.paid, total: o.total, note: o.note || '', date: o.date, items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1 })) });
+  res.json({ status: o.status || 'new', paid: !!o.paid, total: o.total, note: o.note || '', date: o.date, review: (() => { const r = d.reviews.find(x => x.orderId === o.id); return r ? { rating: r.rating, text: r.text, approved: r.approved } : null; })(), items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1 })) });
 }));
 
 app.put('/api/items/:id/hidden', needAdmin, wrap(async (req, res) => {
@@ -372,6 +372,34 @@ app.post('/api/push/test', limiter(20, 3600e3), wrap(async (req, res) => {
   if (!d.subs.some(x => x.endpoint === ep)) return res.status(404).json({ error: 'Nu ești abonat la notificări' });
   await pushTo(d, x => x.endpoint === ep, { title: '🔔 Test notificare', body: 'Notificările funcționează!', tag: 'test', url: '/' });
   res.json({ ok: true });
+}));
+
+app.post('/api/reviews', limiter(20, 3600e3), wrap(async (req, res) => {
+  const d = await load(), o = d.orders.find(x => x.id === String(req.body.orderId || ''));
+  if (!o) return res.status(404).json({ error: 'Negăsit' });
+  const rating = Math.round(parseFloat(req.body.rating));
+  if (!(rating >= 1 && rating <= 5)) return res.status(400).json({ error: 'Alege o notă de la 1 la 5 stele.' });
+  const text = String(req.body.text || '').trim().slice(0, 500), name = String(o.name || '').trim().split(/\s+/)[0].slice(0, 30);
+  let r = d.reviews.find(x => x.orderId === o.id);
+  if (r) { r.rating = rating; r.text = text; r.approved = false; r.date = new Date().toISOString(); }
+  else { r = { id: crypto.randomBytes(5).toString('hex'), orderId: o.id, name, rating, text, approved: false, date: new Date().toISOString() }; d.reviews.unshift(r); d.reviews = d.reviews.slice(0, 1000); }
+  await save(d);
+  notify('⭐ Recenzie nouă: ' + rating + '/5 de la ' + name + (text ? '\n' + text : ''));
+  pushTo(d, x => x.role === 'admin' && Date.now() - (x.adminAt || 0) < 30 * 864e5, { title: '⭐ Recenzie nouă', body: name + ' – ' + rating + '/5', tag: 'review', url: '/' }).catch(() => {});
+  res.json({ ok: true });
+}));
+app.get('/api/reviews', wrap(async (req, res) => {
+  const d = await load(), L = d.reviews.filter(r => r.approved);
+  res.json({ avg: L.length ? Math.round(L.reduce((t, r) => t + r.rating, 0) / L.length * 10) / 10 : 0, count: L.length, reviews: L.slice(0, 100).map(r => ({ name: r.name, rating: r.rating, text: r.text, date: r.date })) });
+}));
+app.get('/api/reviews/all', needAdmin, wrap(async (req, res) => res.json((await load()).reviews)));
+app.put('/api/reviews/:id', needAdmin, wrap(async (req, res) => {
+  const d = await load(), r = d.reviews.find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: 'Negăsit' });
+  r.approved = !!req.body.approved; await save(d); res.json({ ok: true });
+}));
+app.delete('/api/reviews/:id', needAdmin, wrap(async (req, res) => {
+  const d = await load(); d.reviews = d.reviews.filter(x => x.id !== req.params.id); await save(d); res.json({ ok: true });
 }));
 
 app.get('/api/backup', needAdmin, wrap(async (req, res) => {
