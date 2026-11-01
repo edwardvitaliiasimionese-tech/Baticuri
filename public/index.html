@@ -711,7 +711,7 @@ async function trackView(ids){
 function cartView(){
   const o=modal('');
   const draw=()=>{
-    const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'',gf0=!!(o.querySelector('#gf')&&o.querySelector('#gf').checked),gn0=o.querySelector('#gn')?o.querySelector('#gn').value:'',g0=!!(o.querySelector('#gdpr')&&o.querySelector('#gdpr').checked);
+    const nv=o.querySelector('#n'),pv=o.querySelector('#ph'),n0=nv?nv.value:'',p0=pv?pv.value:'';
     const L=cartLines(),good=L.filter(i=>!i.bad),sub=good.reduce((t,i)=>t+i.price*i.q,0),disc=promoA?(promoA.type==='pct'?Math.round(sub*promoA.value)/100:Math.min(promoA.value,sub)):0,total=Math.round((sub-disc)*100)/100;
     o.querySelector('.dlg').innerHTML='<h3>Coșul meu</h3>'+(L.length?
       L.map(i=>i.bad?
@@ -719,25 +719,23 @@ function cartView(){
         '<div class="box"><b>'+esc(i.title)+'</b><small>'+eur(i.price)+' × '+i.q+' = '+eur(i.price*i.q)+'</small><div style="display:flex;gap:10px;align-items:center;margin-top:8px">'+stepper(i.id)+'<button class="dng" data-rm="'+esc(i.id)+'">Elimină</button></div></div>').join('')+
       (good.length?
         '<label>Cod promoțional</label><div class="row"><input id="pc" placeholder="COD" value="'+esc(promoA?promoA.code:'')+'"><button type="button" id="pa">Aplică</button></div>'+(promoA?'<div class="note">Reducere ('+esc(promoA.code)+'): −'+eur(disc)+'</div>':'')+'<div class="box"><small>Total de plată</small><b>'+eur(total)+'</b></div>'+
-        '<label>Numele tău</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" placeholder="+40 712 345 678" value="'+esc(p0)+'">'+'<label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="gf" style="width:auto"'+(gf0?' checked':'')+'> Ambalaj cadou</label><textarea id="gn" rows="2" placeholder="Mesaj pentru bilet (opțional)" style="display:'+(gf0?'block':'none')+'">'+esc(gn0)+'</textarea>'+'<label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px"><input type="checkbox" id="gdpr" style="width:auto;margin-top:4px"'+(g0?' checked':'')+'><span>Sunt de acord ca numele și telefonul meu să fie folosite doar pentru a procesa această comandă.</span></label>'+
+        '<label>Numele tău</label><input id="n" autocomplete="name" value="'+esc(n0)+'"><label>Numărul tău de WhatsApp (cu prefixul țării)</label><input id="ph" type="tel" autocomplete="tel" inputmode="tel" placeholder="+40 712 345 678" value="'+esc(p0)+'">'+
         (vac()?'<div class="nd">'+VACMSG()+'</div>':'')+'<div class="row"><button id="cl">Continuă cumpărăturile</button><button class="pri" id="ok"'+(vac()?' disabled':'')+'>Comandă</button></div>'
         :'<div class="row"><button id="cl">Închide</button></div>')
       :'<p class="note">Coșul tău este gol.</p><div class="row"><button id="cl">Închide</button></div>');
     o.querySelector('#cl').onclick=()=>o.remove();
     o.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{cart=cart.filter(x=>x!==b.dataset.rm);saveCart();render();draw();});
     bindQty(o,()=>{render();draw();});
-    const gfb=o.querySelector('#gf');if(gfb)gfb.onchange=()=>{o.querySelector('#gn').style.display=gfb.checked?'block':'none';};
     const pa=o.querySelector('#pa');
     if(pa)pa.onclick=async()=>{const c=o.querySelector('#pc').value.trim();if(!c){promoA=null;draw();return;}try{promoA=await api('/api/promo/'+encodeURIComponent(c));}catch(e){promoA=null;alert(e.message);}draw();};
     const ok=o.querySelector('#ok');
     if(ok)ok.onclick=async()=>{
       const name=o.querySelector('#n').value.trim(),phone=o.querySelector('#ph').value.trim();
       if(!name||!/^(\+|00)\d[\d\s.-]{7,}$/.test(phone)){alert('Trebuie numele tău și numărul de WhatsApp cu prefixul țării, de exemplu +40 712 345 678.');return;}
-      if(!o.querySelector('#gdpr').checked){alert('Trebuie să bifezi acordul pentru folosirea datelor.');return;}
       const ids=cart.filter(k=>good.some(g=>g.id===k));
       ok.disabled=true;ok.textContent='Se trimite…';
       try{
-        const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone,promo:promoA?promoA.code:'',consent:true,gift:!!o.querySelector('#gf').checked,giftNote:o.querySelector('#gn').value})});
+        const r=await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemIds:ids,name,phone,promo:promoA?promoA.code:''})});
         try{const m=myOrders();m.unshift(r.id);localStorage.setItem('myorders',JSON.stringify(m.slice(0,20)));}catch(e){}
         promoA=null;const done=new Set(ids);cart=cart.filter(k=>!done.has(k));saveCart();o.remove();bubDis='';pushSync();refresh();refreshBubble();pay(good,total,name,phone,r.id);
       }catch(x){alert(x.message);await refresh();draw();}
