@@ -158,8 +158,9 @@ app.get('/', wrap(async (req, res) => {
   let theme = 'noir', shop = 'Magazin', title = 'Magazin', desc = 'Comandă direct de aici.', img = '';
   try {
     const d = await load(); title = shop = d.settings.shop; theme = d.settings.theme || 'noir';
-    const it = d.items.find(x => x.id === req.query.a && !x.hidden);
+    const it = d.items.find(x => x.id === req.query.a && !x.hidden), ct = (d.categories || []).find(x => x.id === req.query.cat);
     if (it) { title = it.title + ' – ' + d.settings.shop; desc = it.price + ' €' + (it.desc ? ' · ' + it.desc.slice(0, 120) : ''); img = it.imgs[0] || (it.variants || []).map(v => v.img).find(Boolean) || ''; }
+    else if (ct) { title = ct.name + ' – ' + d.settings.shop; desc = 'Vezi articolele din categoria ' + ct.name; const f = d.items.find(x => !x.hidden && x.cat === ct.id && x.imgs[0]); img = f ? f.imgs[0] : ''; }
     else { const f = d.items.find(x => !x.hidden && x.imgs[0]); img = f ? f.imgs[0] : ''; }
   } catch (e) {}
   const tags = '<meta property="og:title" content="' + eh(title) + '"><meta property="og:description" content="' + eh(desc) + '"><meta property="og:type" content="website">' + (img ? '<meta property="og:image" content="' + eh(img) + '">' : '') + '<meta name="twitter:card" content="summary_large_image">';
@@ -167,7 +168,7 @@ app.get('/', wrap(async (req, res) => {
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa, about: d.settings.about, zone: d.settings.zone, vacation: !!d.settings.vacation, vacMsg: d.settings.vacMsg, theme: d.settings.theme || 'noir', reviews: d.settings.reviews }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [] }); }));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa, about: d.settings.about, zone: d.settings.zone, vacation: !!d.settings.vacation, vacMsg: d.settings.vacMsg, theme: d.settings.theme || 'noir', reviews: d.settings.reviews, banner: d.settings.banner }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [] }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
@@ -180,7 +181,7 @@ app.post('/api/logout', (req, res) => { res.clearCookie('admin', { path: '/' });
 
 app.put('/api/settings', needAdmin, wrap(async (req, res) => {
   const d = await load(), s = req.body || {}, c = (v, n) => String(v || '').trim().slice(0, n);
-  d.settings = { shop: c(s.shop, 60) || 'Magazinul meu', holder: c(s.holder, 80), iban: c(s.iban, 40), wa: c(s.wa, 20), about: c(s.about, 1000), zone: c(s.zone, 100), vacation: !!s.vacation, vacMsg: c(s.vacMsg, 200), theme: ['ivory', 'noir', 'bordeaux'].includes(s.theme) ? s.theme : 'noir', reviews: c(s.reviews, 1500) };
+  d.settings = { shop: c(s.shop, 60) || 'Magazinul meu', holder: c(s.holder, 80), iban: c(s.iban, 40), wa: c(s.wa, 20), about: c(s.about, 1000), zone: c(s.zone, 100), vacation: !!s.vacation, vacMsg: c(s.vacMsg, 200), theme: ['ivory', 'noir', 'bordeaux'].includes(s.theme) ? s.theme : 'noir', reviews: c(s.reviews, 1500), banner: c(s.banner, 200) };
   await save(d); res.json(d.settings);
 }));
 
@@ -335,7 +336,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
 app.get('/api/orders/:id/track', limiter(3000, 3600e3), wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Negăsit' });
-  res.json({ status: o.status || 'new', paid: !!o.paid, total: o.total, note: o.note || '', date: o.date, review: (() => { const r = d.reviews.find(x => x.orderId === o.id); return r ? { rating: r.rating, text: r.text, approved: r.approved } : null; })(), items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1 })) });
+  res.json({ status: o.status || 'new', paid: !!o.paid, total: o.total, note: o.note || '', date: o.date, review: (() => { const r = d.reviews.find(x => x.orderId === o.id); return r ? { rating: r.rating, text: r.text, approved: r.approved } : null; })(), items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1, price: i.price })), discount: o.discount || 0, promo: o.promo || '', shop: d.settings.shop });
 }));
 
 app.put('/api/items/:id/hidden', needAdmin, wrap(async (req, res) => {
@@ -389,16 +390,31 @@ app.post('/api/reviews', limiter(20, 3600e3), wrap(async (req, res) => {
 }));
 app.get('/api/reviews', wrap(async (req, res) => {
   const d = await load(), L = d.reviews.filter(r => r.approved);
-  res.json({ avg: L.length ? Math.round(L.reduce((t, r) => t + r.rating, 0) / L.length * 10) / 10 : 0, count: L.length, reviews: L.slice(0, 100).map(r => ({ name: r.name, rating: r.rating, text: r.text, date: r.date })) });
+  res.json({ avg: L.length ? Math.round(L.reduce((t, r) => t + r.rating, 0) / L.length * 10) / 10 : 0, count: L.length, reviews: L.slice(0, 100).map(r => ({ name: r.name, rating: r.rating, text: r.text, reply: r.reply || '', date: r.date })) });
 }));
 app.get('/api/reviews/all', needAdmin, wrap(async (req, res) => res.json((await load()).reviews)));
 app.put('/api/reviews/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), r = d.reviews.find(x => x.id === req.params.id);
   if (!r) return res.status(404).json({ error: 'Negăsit' });
-  r.approved = !!req.body.approved; await save(d); res.json({ ok: true });
+  if (req.body.approved !== undefined) r.approved = !!req.body.approved; if (typeof req.body.reply === 'string') r.reply = req.body.reply.slice(0, 300); await save(d); res.json({ ok: true });
 }));
 app.delete('/api/reviews/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(); d.reviews = d.reviews.filter(x => x.id !== req.params.id); await save(d); res.json({ ok: true });
+}));
+
+app.post('/api/orders-bulk', needAdmin, wrap(async (req, res) => {
+  const d = await load(), ids = new Set((Array.isArray(req.body.ids) ? req.body.ids : []).map(String)).values(), want = new Set(ids), todo = [];
+  const msgs = { confirmed: 'Comanda ta a fost confirmată.', ready: 'Comanda ta este pregătită pentru predare.', delivered: 'Comanda a fost predată. Mulțumim!' };
+  for (const o of d.orders) {
+    if (!want.has(o.id)) continue;
+    const prevS = o.status || 'new', prevP = !!o.paid;
+    if (req.body.paid !== undefined) o.paid = !!req.body.paid;
+    if (['new', 'confirmed', 'ready', 'delivered'].includes(req.body.status)) o.status = req.body.status;
+    const text = (o.status || 'new') !== prevS && msgs[o.status] ? msgs[o.status] : (o.paid && !prevP ? 'Plata a fost confirmată ✓' : '');
+    if (text) todo.push([o, text]);
+  }
+  sync(d); await save(d); res.json({ ok: true, changed: todo.length });
+  todo.forEach(([o, text]) => pushTo(d, x => (x.orders || []).includes(o.id), { title: 'Comanda ta', body: text, tag: 'ord-' + o.id, url: '/?comanda=' + o.id }).catch(() => {}));
 }));
 
 app.get('/api/backup', needAdmin, wrap(async (req, res) => {
