@@ -1,68 +1,97 @@
-/* ============================= */
-/* BATICURI - PINK HOVER EFFECTS */
-/* ============================= */
+/* ==========================
+   BATICURI - SMOOTH ANIMATIONS
+   ========================== */
 
-button,
-.btn,
-a,
-.product-card {
-    transition: all 0.3s ease;
+:root {
+    --pink: #F4A7C5;
+    --pink-shadow: rgba(244, 167, 197, 0.35);
 }
 
-/* BOUTONS */
+/* Transitions globales */
+
+button,
+a,
+.product-card,
+img {
+    transition:
+        transform 0.45s cubic-bezier(.22, 1, .36, 1),
+        background-color 0.35s ease,
+        color 0.35s ease,
+        box-shadow 0.45s ease,
+        border-color 0.35s ease;
+}
+
+/* Boutons */
 
 button:hover,
 .btn:hover {
-    background-color: #F4A7C5;
-    color: #333333;
-    transform: translateY(-3px);
-    box-shadow: 0 6px 18px rgba(244, 167, 197, 0.45);
+    background-color: var(--pink);
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px var(--pink-shadow);
 }
 
-/* CARTES PRODUITS */
+/* Cartes produits */
+
+.product-card {
+    overflow: hidden;
+    will-change: transform;
+}
 
 .product-card:hover {
-    transform: translateY(-6px);
-    box-shadow: 0 10px 25px rgba(244, 167, 197, 0.30);
-    border-color: #F4A7C5;
+    transform: translateY(-8px);
+    box-shadow: 0 15px 35px var(--pink-shadow);
+    border-color: var(--pink);
 }
 
-/* IMAGES PRODUITS */
+/* Images */
 
 .product-card img {
-    transition: transform 0.4s ease;
+    transition: transform 0.7s cubic-bezier(.22, 1, .36, 1);
 }
 
 .product-card:hover img {
-    transform: scale(1.05);
+    transform: scale(1.07);
 }
 
-/* LIENS */
+/* Liens */
 
 a:hover {
     color: #E879A7;
 }
 
-/* EFFET AU SURVOL DES IMAGES */
+/* Apparition progressive */
 
-img {
-    transition: all 0.4s ease;
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(25px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-/* ANIMATION DOUCE */
+.fade-in {
+    animation: fadeInUp 0.8s ease both;
+}
+
+/* Clic */
 
 button:active,
 .btn:active {
-    transform: scale(0.97);
+    transform: scale(0.96);
 }
 
-/* ACCESSIBILITÉ */
+/* Accessibilité */
 
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
-        transition: none !important;
         animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
     }
 }
