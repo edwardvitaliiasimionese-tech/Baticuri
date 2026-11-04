@@ -1,0 +1,68 @@
+/* ============================= */
+/* BATICURI - PINK HOVER EFFECTS */
+/* ============================= */
+
+button,
+.btn,
+a,
+.product-card {
+    transition: all 0.3s ease;
+}
+
+/* BOUTONS */
+
+button:hover,
+.btn:hover {
+    background-color: #F4A7C5;
+    color: #333333;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 18px rgba(244, 167, 197, 0.45);
+}
+
+/* CARTES PRODUITS */
+
+.product-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 10px 25px rgba(244, 167, 197, 0.30);
+    border-color: #F4A7C5;
+}
+
+/* IMAGES PRODUITS */
+
+.product-card img {
+    transition: transform 0.4s ease;
+}
+
+.product-card:hover img {
+    transform: scale(1.05);
+}
+
+/* LIENS */
+
+a:hover {
+    color: #E879A7;
+}
+
+/* EFFET AU SURVOL DES IMAGES */
+
+img {
+    transition: all 0.4s ease;
+}
+
+/* ANIMATION DOUCE */
+
+button:active,
+.btn:active {
+    transform: scale(0.97);
+}
+
+/* ACCESSIBILITÉ */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition: none !important;
+        animation: none !important;
+    }
+}
