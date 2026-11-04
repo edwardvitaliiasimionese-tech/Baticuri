@@ -1,6 +1,6 @@
-/* =================================
-   BATICURI - PINK SMOOTH EFFECTS
-   ================================= */
+/* =====================================
+   BATICURI - PINK SMOOTH ANIMATIONS
+   ===================================== */
 
 :root {
     --pink: #F4A7C5;
@@ -8,7 +8,7 @@
     --pink-shadow: rgba(244, 167, 197, 0.45);
 }
 
-/* TRANSITIONS */
+/* TRANSITIONS GLOBALES */
 
 button,
 .btn,
@@ -45,7 +45,7 @@ a:hover {
     box-shadow: 0 12px 28px var(--pink-shadow);
 }
 
-/* IMAGES */
+/* IMAGES PRODUITS */
 
 .product-card img {
     transition: transform 0.65s cubic-bezier(.22, 1, .36, 1);
@@ -55,12 +55,33 @@ a:hover {
     transform: scale(1.06);
 }
 
-/* ANIMATION AU CLIC */
+/* ANIMATION AU CLIC - 1.5 SECONDE */
 
 button:active,
 .btn:active {
-    transform: scale(0.95);
-    box-shadow: 0 0 20px var(--pink-shadow);
+    animation: pinkClick 1.5s ease;
+}
+
+@keyframes pinkClick {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 var(--pink-shadow);
+    }
+
+    35% {
+        transform: scale(0.93);
+        box-shadow: 0 0 25px var(--pink-shadow);
+    }
+
+    70% {
+        transform: scale(1.04);
+        box-shadow: 0 0 30px var(--pink-shadow);
+    }
+
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 var(--pink-shadow);
+    }
 }
 
 /* FOCUS */
