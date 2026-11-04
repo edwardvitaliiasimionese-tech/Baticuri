@@ -1,90 +1,77 @@
-/* ==========================
-   BATICURI - SMOOTH ANIMATIONS
-   ========================== */
+/* =================================
+   BATICURI - PINK SMOOTH EFFECTS
+   ================================= */
 
 :root {
     --pink: #F4A7C5;
-    --pink-shadow: rgba(244, 167, 197, 0.35);
+    --pink-hover: #EB78A9;
+    --pink-shadow: rgba(244, 167, 197, 0.45);
 }
 
-/* Transitions globales */
+/* TRANSITIONS */
 
 button,
+.btn,
 a,
-.product-card,
-img {
-    transition:
-        transform 0.45s cubic-bezier(.22, 1, .36, 1),
-        background-color 0.35s ease,
-        color 0.35s ease,
-        box-shadow 0.45s ease,
-        border-color 0.35s ease;
+.product-card {
+    transition: all 0.32s cubic-bezier(.22, 1, .36, 1);
 }
 
-/* Boutons */
+/* BOUTONS AU SURVOL */
 
 button:hover,
 .btn:hover {
     background-color: var(--pink);
+    color: #333333;
     transform: translateY(-4px);
-    box-shadow: 0 10px 25px var(--pink-shadow);
+    box-shadow: 0 8px 22px var(--pink-shadow);
 }
 
-/* Cartes produits */
+/* LIENS */
+
+a:hover {
+    color: var(--pink-hover);
+}
+
+/* CARTES PRODUITS */
 
 .product-card {
     overflow: hidden;
-    will-change: transform;
 }
 
 .product-card:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 15px 35px var(--pink-shadow);
+    transform: translateY(-7px);
     border-color: var(--pink);
+    box-shadow: 0 12px 28px var(--pink-shadow);
 }
 
-/* Images */
+/* IMAGES */
 
 .product-card img {
-    transition: transform 0.7s cubic-bezier(.22, 1, .36, 1);
+    transition: transform 0.65s cubic-bezier(.22, 1, .36, 1);
 }
 
 .product-card:hover img {
-    transform: scale(1.07);
+    transform: scale(1.06);
 }
 
-/* Liens */
-
-a:hover {
-    color: #E879A7;
-}
-
-/* Apparition progressive */
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(25px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.fade-in {
-    animation: fadeInUp 0.8s ease both;
-}
-
-/* Clic */
+/* ANIMATION AU CLIC */
 
 button:active,
 .btn:active {
-    transform: scale(0.96);
+    transform: scale(0.95);
+    box-shadow: 0 0 20px var(--pink-shadow);
 }
 
-/* Accessibilité */
+/* FOCUS */
+
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--pink);
+    outline-offset: 4px;
+}
+
+/* ACCESSIBILITÉ */
 
 @media (prefers-reduced-motion: reduce) {
     *,
@@ -92,6 +79,5 @@ button:active,
     *::after {
         animation: none !important;
         transition: none !important;
-        scroll-behavior: auto !important;
     }
 }
