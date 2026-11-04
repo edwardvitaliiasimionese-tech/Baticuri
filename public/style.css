@@ -102,3 +102,21 @@ a:focus-visible {
         transition: none !important;
     }
 }
+.admin-access {
+  text-align: center;
+  padding: 18px 10px;
+  margin-top: 25px;
+}
+
+.admin-access a {
+  color: #999;
+  font-size: 12px;
+  text-decoration: none;
+  opacity: 0.65;
+  transition: 0.3s ease;
+}
+
+.admin-access a:hover {
+  color: #e9a6c8;
+  opacity: 1;
+}
