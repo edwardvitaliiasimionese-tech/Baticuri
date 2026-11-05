@@ -417,6 +417,89 @@ app.post('/api/orders-bulk', needAdmin, wrap(async (req, res) => {
   todo.forEach(([o, text]) => pushTo(d, x => (x.orders || []).includes(o.id), { title: 'Comanda ta', body: text, tag: 'ord-' + o.id, url: '/?comanda=' + o.id }).catch(() => {}));
 }));
 
+const DASHKEY = crypto.createHash('sha256').update('dash:' + PASS).digest('hex');
+const dsig = ts => crypto.createHmac('sha256', DASHKEY).update(String(ts)).digest('hex');
+function dashOk(req) {
+  const m = /(?:^|;\s*)dash=(\d+)\.([a-f0-9]+)/.exec(req.headers.cookie || ''); if (!m) return false;
+  const ts = +m[1]; if (Date.now() - ts > 2 * 3600e3 || ts > Date.now() + 60e3) return false;
+  const sig = dsig(ts); return m[2].length === sig.length && crypto.timingSafeEqual(Buffer.from(m[2]), Buffer.from(sig));
+}
+const needDash = (req, res, next) => dashOk(req) ? next() : res.status(401).json({ error: 'Cod necesar' });
+const tot = o => o.total != null ? o.total : oitems(o).reduce((t, i) => t + (i.price || 0) * (i.qty || 1), 0);
+function dashData(d, days) {
+  const now = Date.now(), since = now - days * 864e5, r2 = n => Math.round(n * 100) / 100;
+  const all = d.orders, inr = all.filter(o => new Date(o.date).getTime() >= since), paid = inr.filter(o => o.paid);
+  const sum = a => r2(a.reduce((t, o) => t + tot(o), 0));
+  const findItem = id => { const k = String(id).split(':')[0]; return d.items.find(x => x.id === k) || ((d.trash || []).find(t => t.item.id === k) || {}).item; };
+  const catOf = id => { const it = findItem(id), c = it && d.categories.find(x => x.id === it.cat); return c ? c.name : 'Fără categorie'; };
+  const top = {}, cats = {};
+  inr.forEach(o => oitems(o).forEach(i => {
+    const q = i.qty || 1, v = (i.price || 0) * q, t = top[i.title] || (top[i.title] = { title: i.title, units: 0, paidUnits: 0, revenue: 0 });
+    t.units += q;
+    if (o.paid) { t.paidUnits += q; t.revenue += v; const cn = catOf(i.id); cats[cn] = (cats[cn] || 0) + v; }
+  }));
+  const day = t => new Date(t).toISOString().slice(0, 10), n = Math.min(days, 90), daily = [];
+  for (let k = n - 1; k >= 0; k--) daily.push({ d: day(now - k * 864e5), rev: 0, n: 0 });
+  const di = Object.fromEntries(daily.map((x, i) => [x.d, i]));
+  inr.forEach(o => { const i = di[day(new Date(o.date).getTime())]; if (i !== undefined) { daily[i].n++; if (o.paid) daily[i].rev += tot(o); } });
+  const mk = t => t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'), monthly = [];
+  for (let k = 11; k >= 0; k--) { const t = new Date(now); t.setDate(1); t.setMonth(t.getMonth() - k); monthly.push({ m: mk(t), rev: 0, n: 0 }); }
+  const mi = Object.fromEntries(monthly.map((x, i) => [x.m, i]));
+  all.forEach(o => { const i = mi[mk(new Date(o.date))]; if (i !== undefined) { monthly[i].n++; if (o.paid) monthly[i].rev += tot(o); } });
+  daily.forEach(x => x.rev = r2(x.rev)); monthly.forEach(x => x.rev = r2(x.rev));
+  const cust = {};
+  all.forEach(o => {
+    const ph = String(o.phone || '').replace(/\D/g, ''), t = new Date(o.date).getTime(), c = cust[ph] || (cust[ph] = { name: o.name, phone: o.phone, n: 0, spent: 0, first: t, last: t });
+    c.n++; if (o.paid) c.spent += tot(o); c.first = Math.min(c.first, t); c.last = Math.max(c.last, t);
+  });
+  const cl = Object.values(cust);
+  const st = {}; all.forEach(o => { const k = o.status || 'new'; st[k] = (st[k] || 0) + 1; });
+  const views = d.items.map(it => view(d, it)), low = [], soldOut = [];
+  views.forEach(it => {
+    if (it.variants && it.variants.length) { it.variants.forEach(v => { if (v.sold) soldOut.push(it.title + ' – ' + v.name); else if (v.qty > 1 && v.left <= 2) low.push({ title: it.title + ' – ' + v.name, left: v.left, qty: v.qty }); }); }
+    else if (it.sold) soldOut.push(it.title);
+    else if (it.qty > 1 && it.left <= 2) low.push({ title: it.title, left: it.left, qty: it.qty });
+  });
+  const wl = {}; (d.waitlist || []).forEach(w => { wl[w.title] = (wl[w.title] || 0) + 1; });
+  const rv = d.reviews || [], rvA = rv.filter(r => r.approved);
+  const avg = a => a.length ? Math.round(a.reduce((t, r) => t + r.rating, 0) / a.length * 10) / 10 : 0;
+  const stt = { new: 'nouă', confirmed: 'confirmată', ready: 'pregătită', delivered: 'predată' };
+  return {
+    days, kpi: { orders: inr.length, paidOrders: paid.length, revenue: sum(paid), pending: sum(inr.filter(o => !o.paid)), avgOrder: paid.length ? r2(sum(paid) / paid.length) : 0, units: inr.reduce((t, o) => t + oitems(o).reduce((a, i) => a + (i.qty || 1), 0), 0), discount: r2(inr.reduce((t, o) => t + (o.discount || 0), 0)), paidRate: inr.length ? Math.round(paid.length / inr.length * 100) : 0, customers: cl.length, repeat: cl.filter(c => c.n >= 2).length, newCustomers: cl.filter(c => c.first >= since).length },
+    daily, monthly, topItems: Object.values(top).map(t => ({ ...t, revenue: r2(t.revenue) })).sort((a, b) => b.units - a.units).slice(0, 12),
+    categories: Object.entries(cats).map(([name, v]) => ({ name, revenue: r2(v) })).sort((a, b) => b.revenue - a.revenue),
+    pipeline: st, topCustomers: cl.sort((a, b) => b.spent - a.spent).slice(0, 8).map(c => ({ name: c.name, phone: c.phone, orders: c.n, spent: r2(c.spent) })),
+    stock: { items: d.items.length, hidden: d.items.filter(i => i.hidden).length, low, soldOut: soldOut.slice(0, 30), trash: (d.trash || []).length },
+    promos: (d.promos || []).map(p => ({ code: p.code, type: p.type, value: p.value, uses: p.uses || 0, active: p.active !== false, discount: r2(all.filter(o => o.promo === p.code).reduce((t, o) => t + (o.discount || 0), 0)) })),
+    waitlist: { total: (d.waitlist || []).length, top: Object.entries(wl).map(([title, n]) => ({ title, n })).sort((a, b) => b.n - a.n).slice(0, 6) },
+    reviews: { count: rv.length, approved: rvA.length, pending: rv.length - rvA.length, avg: avg(rvA) },
+    push: { admin: (d.subs || []).filter(x => x.role === 'admin').length, customers: (d.subs || []).filter(x => x.role !== 'admin').length },
+    recent: all.slice(0, 10).map(o => ({ name: o.name, total: r2(tot(o)), status: stt[o.status || 'new'], paid: !!o.paid, date: o.date, items: oitems(o).map(i => i.title + ((i.qty || 1) > 1 ? ' ×' + i.qty : '')).join(', ') }))
+  };
+}
+app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
+app.post('/api/dash/login', throttle, (req, res) => {
+  const a = Buffer.from(String(req.body.password || '')), b = Buffer.from(PASS);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Cod incorect' });
+  const ts = Date.now();
+  res.cookie('dash', ts + '.' + dsig(ts), { httpOnly: true, sameSite: 'strict', secure: req.secure, maxAge: 2 * 3600e3, path: '/' });
+  res.json({ ok: true });
+});
+app.post('/api/dash/logout', (req, res) => { res.clearCookie('dash', { path: '/' }); res.json({ ok: true }); });
+app.get('/api/dash/data', needDash, wrap(async (req, res) => {
+  const days = [7, 30, 90, 365].includes(parseInt(req.query.days)) ? parseInt(req.query.days) : 30;
+  res.json(dashData(await load(), days));
+}));
+app.get('/api/dash/orders.csv', needDash, wrap(async (req, res) => {
+  const d = await load(), q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const rows = [['Data', 'Nr comandă', 'Nume', 'Telefon', 'Articole', 'Total', 'Plătită', 'Stare']].concat(d.orders.map(o => [o.date, o.id, o.name, o.phone, oitems(o).map(i => i.title + ((i.qty || 1) > 1 ? ' ×' + i.qty : '')).join(', '), tot(o), o.paid ? 'Da' : 'Nu', o.status || 'new']));
+  res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="comenzi.csv"' });
+  res.send('\ufeff' + rows.map(r => r.map(q).join(';')).join('\r\n'));
+}));
+app.get('/api/dash/backup', needDash, wrap(async (req, res) => {
+  const d = await load(); res.set('Content-Disposition', 'attachment; filename="backup-' + new Date().toISOString().slice(0, 10) + '.json"'); res.json(d);
+}));
+
 app.get('/api/backup', needAdmin, wrap(async (req, res) => {
   const d = await load();
   res.set('Content-Disposition', 'attachment; filename="backup-' + new Date().toISOString().slice(0, 10) + '.json"'); res.json(d);
