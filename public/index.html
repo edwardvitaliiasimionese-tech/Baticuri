@@ -1141,8 +1141,5 @@ setInterval(refreshBubble,20000);
 const hideSplash=()=>{const sp=document.getElementById('splash');if(sp){sp.classList.add('off');setTimeout(()=>sp.remove(),500);}};setTimeout(hideSplash,20000);
 refresh().then(()=>{hideSplash();refreshBubble();const P=new URLSearchParams(location.search),a=P.get('a'),c=P.get('comanda');if(a){const it=S.items.find(x=>x.id===a);if(it)openItem(it);}if(c)trackPage(c);{const cat=P.get('cat');if(cat&&(S.categories||[]).some(x=>x.id===cat)){fcat=cat;const sb=P.get('sub'),k=S.categories.find(x=>x.id===cat);fsub=sb&&(k.subs||[]).some(x=>x.id===sb)?sb:'';sopen=false;render();renderSearch();}}});
 </script>
-  <div class="admin-access">
-  <a href="/admin/">⚙️ Administration</a>
-  </div>
 </body>
 </html>
