@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ro" data-theme="noir">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root,:root[data-theme="noir"]{--bg:#0a0709;--card:#120c10;--tx:#f7edf1;--mut:#c9aab8;--ac:#f472b6;--acx:#1a0b12;--bd:rgba(244,114,182,.28);--ac2:rgba(244,114,182,.8);--soft:#1a1016;--red:#ff9aa8;--grad:linear-gradient(180deg,#050304,#0c0709);--line:#f472b6;--line2:#fbcfe8;--pk:#f9a8d4;--ok:#7ddba0}
+:root[data-theme="ivory"]{--bg:#fbf7f1;--card:#ffffff;--tx:#3a2a22;--mut:#8a7466;--ac:#b76e79;--acx:#ffffff;--bd:#e6d9ca;--ac2:#b76e79;--soft:#f6efe6;--red:#a83240;--grad:linear-gradient(180deg,#fbf7f1,#f1e7da);--line:#b76e79;--line2:#e8c4c0;--pk:#8f4a55;--ok:#2f8f5b}
+:root[data-theme="bordeaux"]{--bg:#3a0c18;--card:#4a1422;--tx:#f6e7cf;--mut:#cfae8a;--ac:#d9b77a;--acx:#3a0c18;--bd:#6b2a3a;--ac2:#d9b77a;--soft:#55192a;--red:#ff9a9a;--grad:linear-gradient(180deg,#2c0711,#3f0f1d);--line:#d9b77a;--line2:#f1dcb0;--pk:#ecd29b;--ok:#9be3b8}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--grad) fixed;color:var(--tx);font:14px/1.45 'Montserrat',system-ui,sans-serif}
+#bgl{position:fixed;inset:0;z-index:0;pointer-events:none}#bgl svg{width:100%;height:100%;display:block}#bgl path{fill:none;stroke-linecap:round;vector-effect:non-scaling-stroke}
+#app{position:relative;z-index:1;max-width:1150px;margin:auto;padding:18px 14px 50px}
+h1,h2{font-family:'Cormorant Garamond',Georgia,serif;margin:0}
+h1{font-size:1.9rem;letter-spacing:.14em;text-transform:uppercase;background:linear-gradient(90deg,var(--pk),var(--ac),var(--pk));-webkit-background-clip:text;background-clip:text;color:transparent}
+h2{font-size:1.25rem;font-weight:600;margin-bottom:10px}
+.sub{color:var(--mut);font-size:.75rem;letter-spacing:.14em;text-transform:uppercase}
+button,.btn{font:inherit;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;background:transparent;color:var(--tx);border:1px solid var(--ac2);border-radius:2px;padding:9px 14px;cursor:pointer;text-decoration:none;display:inline-block}
+button:hover,.btn:hover{background:var(--soft)}
+button.on,.pri{background:var(--ac);color:var(--acx);border-color:var(--ac);font-weight:600}
+input{font:inherit;width:100%;padding:12px;border-radius:2px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+.top{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;padding-bottom:12px;margin-bottom:14px;border-bottom:1px solid var(--bd)}
+.acts,.per{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.per{margin-bottom:14px}
+.kg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+.k{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:12px}
+.kl{color:var(--mut);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase}
+.kv{font-family:'Cormorant Garamond',Georgia,serif;font-size:1.7rem;font-weight:600;color:var(--pk);line-height:1.15;margin-top:2px}
+.ks{color:var(--mut);font-size:.72rem}
+.pg{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+.panel{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:14px;min-width:0}
+.wide{grid-column:1/-1}
+.ch{width:100%;height:auto;display:block}.ch text{fill:var(--mut);font-size:9px}
+.hb{margin-bottom:9px}.hl{display:flex;justify-content:space-between;gap:8px;font-size:.82rem}.hl span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ht{height:6px;background:var(--soft);border-radius:3px;margin-top:4px;overflow:hidden}.ht div{height:100%;background:linear-gradient(90deg,var(--line),var(--line2))}
+.hs{color:var(--mut);font-size:.7rem;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:.8rem}th{color:var(--mut);font-weight:500;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;text-align:left}
+th,td{padding:7px 6px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}td.r,th.r{text-align:right}
+.mut{color:var(--mut)}.ok{color:var(--ok)}.bad{color:var(--red)}
+.pill{display:inline-block;border:1px solid var(--bd);border-radius:999px;padding:2px 9px;font-size:.72rem;margin:0 6px 6px 0}
+.login{max-width:340px;margin:12vh auto 0;text-align:center;display:flex;flex-direction:column;gap:12px}.login a{color:var(--mut);font-size:.8rem}.err{color:var(--red);min-height:1.2em;font-size:.8rem}
+</style>
+</head>
+<body>
+<div id="bgl" aria-hidden="true"><svg viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="lgA" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--line);stop-opacity:0"/><stop offset=".45" style="stop-color:var(--line);stop-opacity:.8"/><stop offset=".62" style="stop-color:var(--line2);stop-opacity:1"/><stop offset="1" style="stop-color:var(--line);stop-opacity:0"/></linearGradient></defs><g stroke="url(#lgA)"><path d="M-50 930 C 180 800 380 880 540 780 S 800 380 1050 320" stroke-width="1.2"/><path d="M-50 760 C 140 690 330 760 480 650 S 760 270 1050 190" stroke-width=".8" opacity=".7"/><path d="M-50 560 C 120 520 300 590 430 490 S 700 150 1050 80" stroke-width=".7" opacity=".5"/></g></svg></div>
+<div id="app"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const CUR='EUR';
+const eur=n=>new Intl.NumberFormat('ro-RO',{style:'currency',currency:CUR,minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2}).format(n);
+const num=n=>new Intl.NumberFormat('ro-RO').format(n);
+async function api(url,opt){const r=await fetch(url,opt);const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||'Eroare');e.status=r.status;throw e;}return j;}
+let days=30,D=null,shop='Baticuri';
+const PIPE={new:'Noi',confirmed:'Confirmate',ready:'Pregătite',delivered:'Predate'};
+
+function loginView(msg){
+  D=null;
+  $('#app').innerHTML='<div class="login"><h1>'+esc(shop)+'</h1><div class="sub">Dashboard vânzător</div><input id="pw" type="password" placeholder="Cod admin" autocomplete="current-password"><button class="pri" id="go">Intră</button><div class="err">'+esc(msg||'')+'</div><a href="/">← Înapoi la magazin</a></div>';
+  const go=async()=>{try{await api('/api/dash/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('#pw').value})});load();}catch(e){loginView(e.message);}};
+  $('#go').onclick=go;$('#pw').onkeydown=e=>{if(e.key==='Enter')go();};$('#pw').focus();
+}
+function barChart(rows,vk,lbl,fmt){
+  if(!rows.length)return '<p class="mut">Nu sunt date.</p>';
+  const W=Math.max(320,rows.length*22),H=150,max=Math.max(...rows.map(r=>r[vk]),1),bw=W/rows.length,every=Math.ceil(rows.length/8);
+  return '<svg class="ch" viewBox="0 0 '+W+' '+(H+24)+'"><defs><linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--line2)"/><stop offset="1" style="stop-color:var(--line)"/></linearGradient></defs>'+
+    rows.map((r,i)=>{const h=Math.round(r[vk]/max*H);return '<rect x="'+(i*bw+bw*.18).toFixed(1)+'" y="'+(H-h)+'" width="'+(bw*.64).toFixed(1)+'" height="'+Math.max(h,1)+'" rx="2" fill="url(#gb)"><title>'+esc(lbl(r))+' : '+fmt(r[vk])+'</title></rect>'+(i%every===0?'<text x="'+(i*bw+bw/2).toFixed(1)+'" y="'+(H+16)+'" text-anchor="middle">'+esc(lbl(r))+'</text>':'');}).join('')+'</svg>';
+}
+function hbars(rows,lab,val,fmt,sub){
+  if(!rows.length)return '<p class="mut">Nu sunt date.</p>';
+  const max=Math.max(...rows.map(val),1);
+  return rows.map(r=>'<div class="hb"><div class="hl"><span>'+esc(lab(r))+'</span><b>'+fmt(val(r))+'</b></div><div class="ht"><div style="width:'+Math.round(val(r)/max*100)+'%"></div></div>'+(sub?'<div class="hs">'+sub(r)+'</div>':'')+'</div>').join('');
+}
+function tbl(head,rows){
+  return rows.length?'<table><tr>'+head.map(h=>'<th'+(h[1]?' class="r"':'')+'>'+h[0]+'</th>').join('')+'</tr>'+rows.map(r=>'<tr>'+r.map((c,i)=>'<td'+(head[i][1]?' class="r"':'')+'>'+c+'</td>').join('')+'</tr>').join('')+'</table>':'<p class="mut">Nu sunt date.</p>';
+}
+function render(){
+  const k=D.kpi,kp=(l,v,s)=>'<div class="k"><div class="kl">'+l+'</div><div class="kv">'+v+'</div>'+(s?'<div class="ks">'+s+'</div>':'')+'</div>';
+  const p=(t,body,cls)=>'<section class="panel'+(cls?' '+cls:'')+'"><h2>'+t+'</h2>'+body+'</section>';
+  const st=D.stock,rv=D.reviews,wl=D.waitlist;
+  $('#app').innerHTML=
+   '<header class="top"><div><h1>'+esc(shop)+'</h1><div class="sub">Dashboard</div></div><div class="acts"><a class="btn" href="/">← Magazin</a><button id="rl">Reîncarcă</button><button id="lo">Deconectare</button></div></header>'+
+   '<div class="per">'+[7,30,90,365].map(d=>'<button data-d="'+d+'" class="'+(d===days?'on':'')+'">'+(d===365?'1 an':d+' zile')+'</button>').join('')+'<a class="btn" href="/api/dash/orders.csv">Export Excel</a><a class="btn" href="/api/dash/backup">Backup</a></div>'+
+   '<section class="kg">'+kp('Venituri încasate',eur(k.revenue),k.paidOrders+' comenzi plătite')+kp('Comenzi',num(k.orders),k.paidRate+'% plătite')+kp('Valoare medie',eur(k.avgOrder),'pe comandă plătită')+kp('Articole comandate',num(k.units),'unități')+kp('De încasat',eur(k.pending),'comenzi neplătite')+kp('Clienți',num(k.customers),k.newCustomers+' noi · '+k.repeat+' recurenți')+kp('Reduceri date',eur(k.discount),'coduri promo')+'</section>'+
+   '<div class="pg">'+
+   p('Venituri pe zile (comenzi plătite)',barChart(D.daily,'rev',r=>r.d.slice(5),eur),'wide')+
+   p('Ultimele 12 luni',barChart(D.monthly,'rev',r=>r.m,eur))+
+   p('Comenzi pe luni',barChart(D.monthly,'n',r=>r.m,num))+
+   p('Articole cele mai comandate',hbars(D.topItems,r=>r.title,r=>r.units,num,r=>r.paidUnits+' plătite · '+eur(r.revenue)+' încasat'))+
+   p('Venituri pe categorii',hbars(D.categories,r=>r.name,r=>r.revenue,eur))+
+   p('Stadiul comenzilor (toate)',['new','confirmed','ready','delivered'].map(x=>'<span class="pill">'+PIPE[x]+' : <b>'+(D.pipeline[x]||0)+'</b></span>').join(''))+
+   p('Stoc',
+     '<div><span class="pill">Articole : <b>'+st.items+'</b></span><span class="pill">Ascunse : <b>'+st.hidden+'</b></span><span class="pill">În gunoi : <b>'+st.trash+'</b></span></div>'+
+     '<h2 style="font-size:1rem;margin-top:8px">Stoc redus</h2>'+(st.low.length?tbl([['Articol'],['Rămase',1]],st.low.map(x=>[esc(x.title),'<b class="bad">'+x.left+'</b> / '+x.qty])):'<p class="mut">Totul este în regulă.</p>')+
+     '<h2 style="font-size:1rem;margin-top:8px">Epuizate</h2>'+(st.soldOut.length?st.soldOut.map(t=>'<span class="pill">'+esc(t)+'</span>').join(''):'<p class="mut">Niciunul.</p>'))+
+   p('Cei mai buni clienți',tbl([['Client'],['Comenzi',1],['Cheltuit',1]],D.topCustomers.map(c=>[esc(c.name)+'<div class="mut">'+esc(c.phone)+'</div>',c.orders,eur(c.spent)])))+
+   p('Coduri promo',tbl([['Cod'],['Reducere',1],['Folosit',1],['Total dat',1]],D.promos.map(x=>[esc(x.code)+(x.active?'':' <span class="mut">(oprit)</span>'),x.type==='pct'?x.value+'%':eur(x.value),x.uses,eur(x.discount)])))+
+   p('Listă de așteptare ('+wl.total+')',wl.top.length?hbars(wl.top,r=>r.title,r=>r.n,num):'<p class="mut">Nimeni nu așteaptă un articol.</p>')+
+   p('Recenzii & notificări','<div><span class="pill">Notă medie : <b>'+(rv.avg||'–')+'</b></span><span class="pill">Publicate : <b>'+rv.approved+'</b></span><span class="pill">În așteptare : <b class="'+(rv.pending?'bad':'')+'">'+rv.pending+'</b></span></div><div style="margin-top:6px"><span class="pill">Notificări vânzător : <b>'+D.push.admin+'</b></span><span class="pill">Notificări clienți : <b>'+D.push.customers+'</b></span></div>')+
+   p('Ultimele comenzi',tbl([['Data'],['Client'],['Articole'],['Total',1],['Stare']],D.recent.map(o=>[esc(new Date(o.date).toLocaleDateString('ro-RO')),esc(o.name),esc(o.items),eur(o.total),esc(o.status)+(o.paid?' · <span class="ok">plătită</span>':' · <span class="bad">neplătită</span>')])),'wide')+
+   '</div>';
+  $('#rl').onclick=load;
+  $('#lo').onclick=async()=>{try{await api('/api/dash/logout',{method:'POST'});}catch(e){}loginView();};
+  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{days=+b.dataset.d;load();});
+}
+async function load(){
+  try{D=await api('/api/dash/data?days='+days);render();}
+  catch(e){if(e.status===401)loginView();else $('#app').innerHTML='<div class="login"><p>'+esc(e.message)+'</p><button id="rt">Reîncearcă</button></div>';if($('#rt'))$('#rt').onclick=load;}
+}
+fetch('/api/shop').then(r=>r.json()).then(j=>{shop=(j.settings&&j.settings.shop)||shop;document.documentElement.dataset.theme=(j.settings&&j.settings.theme)||'noir';document.title='Dashboard – '+shop;}).catch(()=>{}).then(load);
+</script>
+</body>
+</html>
