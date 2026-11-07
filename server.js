@@ -110,6 +110,28 @@ const applyVariantImages = async (req, variants) => {
   for (let k = 0; k < files.length; k++) { const v = variants[+idx[k]]; if (v) v.img = await putImage(files[k]); }
 };
 
+const DEFAULT_STEPS = [{ t: 'Comandă primită', d: 'Am primit comanda ta.' }, { t: 'Confirmată', d: 'Comanda ta a fost confirmată.' }, { t: 'Pregătită', d: 'Comanda ta este pregătită pentru predare.' }, { t: 'Predată', d: 'Comanda a fost predată. Mulțumim!' }];
+const getSteps = d => Array.isArray(d.steps) && d.steps.length >= 2 ? d.steps : DEFAULT_STEPS;
+const stepOf = (o, N) => { if (Number.isInteger(o.step)) return Math.max(0, Math.min(N - 1, o.step)); const st = o.status || 'new'; return Math.min(N - 1, st === 'new' ? 0 : st === 'confirmed' ? 1 : st === 'ready' ? 2 : N - 1); };
+const statusOf = (i, N) => i <= 0 ? 'new' : i >= N - 1 ? 'delivered' : i === 1 ? 'confirmed' : 'ready';
+function setStep(d, o, i) {
+  const N = getSteps(d).length; i = Math.max(0, Math.min(N - 1, i));
+  o.step = i; o.status = statusOf(i, N); o.stepTimes = o.stepTimes || {};
+  for (let k = 0; k <= i; k++) if (!o.stepTimes[k]) o.stepTimes[k] = new Date().toISOString();
+  Object.keys(o.stepTimes).forEach(k => { if (+k > i) delete o.stepTimes[k]; });
+}
+function applyOrderUpdate(d, o, body) {
+  const steps = getSteps(d), N = steps.length, prevI = stepOf(o, N), prevP = !!o.paid;
+  if (body.paid !== undefined) o.paid = !!body.paid;
+  let ni = Number.isInteger(body.step) ? body.step : null;
+  if (ni === null && ['new', 'confirmed', 'ready', 'delivered'].includes(body.status)) ni = { new: 0, confirmed: 1, ready: 2, delivered: N - 1 }[body.status];
+  if (ni !== null) setStep(d, o, ni);
+  if (typeof body.note === 'string') o.note = body.note.slice(0, 300);
+  if (typeof body.eta === 'string') o.eta = /^\d{4}-\d{2}-\d{2}$/.test(body.eta) ? body.eta : '';
+  const cur = stepOf(o, N);
+  if (ni !== null && cur > prevI) return steps[cur].t + (steps[cur].d ? ': ' + steps[cur].d : '');
+  return o.paid && !prevP ? 'Plata a fost confirmată ✓' : '';
+}
 async function pushTo(d, pred, payload) {
   if (!webpush || !d.vapid || !d.subs || !d.subs.length) return;
   const list = d.subs.filter(pred); if (!list.length) return;
@@ -168,7 +190,7 @@ app.get('/', wrap(async (req, res) => {
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa, about: d.settings.about, zone: d.settings.zone, vacation: !!d.settings.vacation, vacMsg: d.settings.vacMsg, theme: d.settings.theme || 'noir', reviews: d.settings.reviews, banner: d.settings.banner }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [] }); }));
+app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa, about: d.settings.about, zone: d.settings.zone, vacation: !!d.settings.vacation, vacMsg: d.settings.vacMsg, theme: d.settings.theme || 'noir', reviews: d.settings.reviews, banner: d.settings.banner }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [], steps: getSteps(d) }); }));
 app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
 
 app.post('/api/login', throttle, (req, res) => {
@@ -321,7 +343,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   }
   const final = Math.round((total - discount) * 100) / 100;
   const oid = crypto.randomBytes(6).toString('hex');
-  d.orders.unshift({ id: oid, status: 'new', items, total: final, subtotal: total, discount, promo, consent: new Date().toISOString(), gift: !!req.body.gift, giftNote: String(req.body.giftNote || '').slice(0, 200), name, phone, date: new Date().toISOString(), paid: false });
+  d.orders.unshift({ id: oid, status: 'new', step: 0, stepTimes: { 0: new Date().toISOString() }, items, total: final, subtotal: total, discount, promo, consent: new Date().toISOString(), gift: !!req.body.gift, giftNote: String(req.body.giftNote || '').slice(0, 200), name, phone, date: new Date().toISOString(), paid: false });
   await save(d);
   const LOW = parseInt(process.env.LOW_STOCK || '2'), low = [];
   for (const i of items) {
@@ -336,7 +358,13 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
 app.get('/api/orders/:id/track', limiter(3000, 3600e3), wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Negăsit' });
-  res.json({ status: o.status || 'new', paid: !!o.paid, total: o.total, note: o.note || '', date: o.date, review: (() => { const r = d.reviews.find(x => x.orderId === o.id); return r ? { rating: r.rating, text: r.text, approved: r.approved } : null; })(), items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1, price: i.price })), discount: o.discount || 0, promo: o.promo || '', shop: d.settings.shop });
+  const steps = getSteps(d), N = steps.length, cur = stepOf(o, N), times = o.stepTimes || {};
+  res.json({
+    id: o.id, status: statusOf(cur, N), step: cur, steps: steps.map((x, i) => ({ t: x.t, d: x.d, time: times[i] || (i === 0 ? o.date : '') })),
+    eta: o.eta || '', paid: !!o.paid, total: o.total, note: o.note || '', date: o.date,
+    review: (() => { const r = d.reviews.find(x => x.orderId === o.id); return r ? { rating: r.rating, text: r.text, approved: r.approved } : null; })(),
+    items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1, price: i.price })), discount: o.discount || 0, promo: o.promo || '', shop: d.settings.shop
+  });
 }));
 
 app.put('/api/items/:id/hidden', needAdmin, wrap(async (req, res) => {
@@ -403,16 +431,8 @@ app.delete('/api/reviews/:id', needAdmin, wrap(async (req, res) => {
 }));
 
 app.post('/api/orders-bulk', needAdmin, wrap(async (req, res) => {
-  const d = await load(), ids = new Set((Array.isArray(req.body.ids) ? req.body.ids : []).map(String)).values(), want = new Set(ids), todo = [];
-  const msgs = { confirmed: 'Comanda ta a fost confirmată.', ready: 'Comanda ta este pregătită pentru predare.', delivered: 'Comanda a fost predată. Mulțumim!' };
-  for (const o of d.orders) {
-    if (!want.has(o.id)) continue;
-    const prevS = o.status || 'new', prevP = !!o.paid;
-    if (req.body.paid !== undefined) o.paid = !!req.body.paid;
-    if (['new', 'confirmed', 'ready', 'delivered'].includes(req.body.status)) o.status = req.body.status;
-    const text = (o.status || 'new') !== prevS && msgs[o.status] ? msgs[o.status] : (o.paid && !prevP ? 'Plata a fost confirmată ✓' : '');
-    if (text) todo.push([o, text]);
-  }
+  const d = await load(), want = new Set((Array.isArray(req.body.ids) ? req.body.ids : []).map(String)), todo = [];
+  for (const o of d.orders) { if (!want.has(o.id)) continue; const text = applyOrderUpdate(d, o, req.body); if (text) todo.push([o, text]); }
   sync(d); await save(d); res.json({ ok: true, changed: todo.length });
   todo.forEach(([o, text]) => pushTo(d, x => (x.orders || []).includes(o.id), { title: 'Comanda ta', body: text, tag: 'ord-' + o.id, url: '/?comanda=' + o.id }).catch(() => {}));
 }));
@@ -453,7 +473,7 @@ function dashData(d, days) {
     c.n++; if (o.paid) c.spent += tot(o); c.first = Math.min(c.first, t); c.last = Math.max(c.last, t);
   });
   const cl = Object.values(cust);
-  const st = {}; all.forEach(o => { const k = o.status || 'new'; st[k] = (st[k] || 0) + 1; });
+  const stp = getSteps(d), st = stp.map(x => ({ t: x.t, n: 0 })); all.forEach(o => { st[stepOf(o, stp.length)].n++; });
   const views = d.items.map(it => view(d, it)), low = [], soldOut = [];
   views.forEach(it => {
     if (it.variants && it.variants.length) { it.variants.forEach(v => { if (v.sold) soldOut.push(it.title + ' – ' + v.name); else if (v.qty > 1 && v.left <= 2) low.push({ title: it.title + ' – ' + v.name, left: v.left, qty: v.qty }); }); }
@@ -474,7 +494,7 @@ function dashData(d, days) {
     waitlist: { total: (d.waitlist || []).length, top: Object.entries(wl).map(([title, n]) => ({ title, n })).sort((a, b) => b.n - a.n).slice(0, 6) },
     reviews: { count: rv.length, approved: rvA.length, pending: rv.length - rvA.length, avg: avg(rvA) },
     push: { admin: (d.subs || []).filter(x => x.role === 'admin').length, customers: (d.subs || []).filter(x => x.role !== 'admin').length },
-    recent: all.slice(0, 10).map(o => ({ name: o.name, total: r2(tot(o)), status: stt[o.status || 'new'], paid: !!o.paid, date: o.date, items: oitems(o).map(i => i.title + ((i.qty || 1) > 1 ? ' ×' + i.qty : '')).join(', ') }))
+    recent: all.slice(0, 10).map(o => ({ name: o.name, total: r2(tot(o)), status: getSteps(d)[stepOf(o, getSteps(d).length)].t, paid: !!o.paid, date: o.date, items: oitems(o).map(i => i.title + ((i.qty || 1) > 1 ? ' ×' + i.qty : '')).join(', ') }))
   };
 }
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
@@ -521,11 +541,18 @@ app.get('/api/orders', needAdmin, wrap(async (req, res) => res.json((await load(
 app.put('/api/orders/:id', needAdmin, wrap(async (req, res) => {
   const d = await load(), o = d.orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Negăsit' });
-  const prevS = o.status || 'new', prevP = !!o.paid;
-  if (req.body.paid !== undefined) o.paid = !!req.body.paid; if (['new', 'confirmed', 'ready', 'delivered'].includes(req.body.status)) o.status = req.body.status; if (typeof req.body.note === 'string') o.note = req.body.note.slice(0, 300); sync(d); await save(d); res.json(o);
-  const msgs = { confirmed: 'Comanda ta a fost confirmată.', ready: 'Comanda ta este pregătită pentru predare.', delivered: 'Comanda a fost predată. Mulțumim!' };
-  const text = (o.status || 'new') !== prevS && msgs[o.status] ? msgs[o.status] : (o.paid && !prevP ? 'Plata a fost confirmată ✓' : '');
+  const text = applyOrderUpdate(d, o, req.body);
+  sync(d); await save(d); res.json(o);
   if (text) pushTo(d, x => (x.orders || []).includes(o.id), { title: 'Comanda ta', body: text, tag: 'ord-' + o.id, url: '/?comanda=' + o.id }).catch(() => {});
+}));
+
+app.put('/api/steps', needAdmin, wrap(async (req, res) => {
+  const d = await load(), raw = Array.isArray(req.body.steps) ? req.body.steps : [], out = [];
+  for (const x of raw.slice(0, 10)) { const t = String(x.t || '').trim().slice(0, 40), ds = String(x.d || '').trim().slice(0, 120); if (t) out.push({ t, d: ds }); }
+  if (out.length < 2) return res.status(400).json({ error: 'Trebuie cel puțin 2 etape.' });
+  d.steps = out;
+  d.orders.forEach(o => { const i = o.status === 'delivered' ? out.length - 1 : stepOf(o, out.length); o.step = i; o.status = statusOf(i, out.length); });
+  await save(d); res.json(out);
 }));
 
 app.delete('/api/orders/:id', needAdmin, wrap(async (req, res) => {
