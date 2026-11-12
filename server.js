@@ -110,7 +110,7 @@ const applyVariantImages = async (req, variants) => {
   for (let k = 0; k < files.length; k++) { const v = variants[+idx[k]]; if (v) v.img = await putImage(files[k]); }
 };
 
-const DEFAULT_STEPS = [{ t: 'Comandă primită', d: 'Am primit comanda ta.' }, { t: 'Confirmată', d: 'Comanda ta a fost confirmată.' }, { t: 'Pregătită', d: 'Comanda ta este pregătită pentru predare.' }, { t: 'Predată', d: 'Comanda a fost predată. Mulțumim!' }];
+const DEFAULT_STEPS = [{ t: 'Comandă primită', d: 'Am primit comanda ta.', i: '📥' }, { t: 'Confirmată', d: 'Comanda ta a fost confirmată.', i: '✅' }, { t: 'Pregătită', d: 'Comanda ta este pregătită pentru predare.', i: '📦' }, { t: 'Predată', d: 'Comanda a fost predată. Mulțumim!', i: '🤝' }];
 const getSteps = d => Array.isArray(d.steps) && d.steps.length >= 2 ? d.steps : DEFAULT_STEPS;
 const stepOf = (o, N) => { if (Number.isInteger(o.step)) return Math.max(0, Math.min(N - 1, o.step)); const st = o.status || 'new'; return Math.min(N - 1, st === 'new' ? 0 : st === 'confirmed' ? 1 : st === 'ready' ? 2 : N - 1); };
 const statusOf = (i, N) => i <= 0 ? 'new' : i >= N - 1 ? 'delivered' : i === 1 ? 'confirmed' : 'ready';
@@ -360,7 +360,7 @@ app.get('/api/orders/:id/track', limiter(3000, 3600e3), wrap(async (req, res) =>
   if (!o) return res.status(404).json({ error: 'Negăsit' });
   const steps = getSteps(d), N = steps.length, cur = stepOf(o, N), times = o.stepTimes || {};
   res.json({
-    id: o.id, status: statusOf(cur, N), step: cur, steps: steps.map((x, i) => ({ t: x.t, d: x.d, time: times[i] || (i === 0 ? o.date : '') })),
+    id: o.id, status: statusOf(cur, N), step: cur, steps: steps.map((x, i) => ({ t: x.t, d: x.d, i: x.i || '', time: times[i] || (i === 0 ? o.date : '') })),
     eta: o.eta || '', paid: !!o.paid, total: o.total, note: o.note || '', date: o.date,
     review: (() => { const r = d.reviews.find(x => x.orderId === o.id); return r ? { rating: r.rating, text: r.text, approved: r.approved } : null; })(),
     items: oitems(o).map(i => ({ title: i.title, qty: i.qty || 1, price: i.price })), discount: o.discount || 0, promo: o.promo || '', shop: d.settings.shop
@@ -548,7 +548,7 @@ app.put('/api/orders/:id', needAdmin, wrap(async (req, res) => {
 
 app.put('/api/steps', needAdmin, wrap(async (req, res) => {
   const d = await load(), raw = Array.isArray(req.body.steps) ? req.body.steps : [], out = [];
-  for (const x of raw.slice(0, 10)) { const t = String(x.t || '').trim().slice(0, 40), ds = String(x.d || '').trim().slice(0, 120); if (t) out.push({ t, d: ds }); }
+  for (const x of raw.slice(0, 10)) { const t = String(x.t || '').trim().slice(0, 40), ds = String(x.d || '').trim().slice(0, 120); if (t) out.push({ t, d: ds, i: String(x.i || '').trim().slice(0, 4) }); }
   if (out.length < 2) return res.status(400).json({ error: 'Trebuie cel puțin 2 etape.' });
   d.steps = out;
   d.orders.forEach(o => { const i = o.status === 'delivered' ? out.length - 1 : stepOf(o, out.length); o.step = i; o.status = statusOf(i, out.length); });
