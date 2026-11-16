@@ -215,8 +215,8 @@ function recordLogin(req, d) {
   const id = devCookie(req) || crypto.randomBytes(8).toString('hex'), info = uaInfo(req.headers['user-agent']), now = new Date().toISOString();
   let dv = d.devices.find(x => x.id === id); const isNew = !dv;
   if (!dv) { dv = { id, first: now, logins: 0 }; d.devices.unshift(dv); }
-  Object.assign(dv, { name: info.name, type: info.type, ip: cleanIp(req), last: now }); dv.logins = (dv.logins || 0) + 1;
-  d.devices = d.devices.slice(0, 50);
+  Object.assign(dv, { name: info.name, type: info.type, ip: cleanIp(req), last: now, admin: true, lastRole: 'admin' }); dv.logins = (dv.logins || 0) + 1;
+  d.devices = d.devices.slice(0, 300);
   return { id, isNew, hadOthers: d.devices.length > 1, info };
 }
 const adevOpts = req => ({ httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 365 * 864e5, path: '/' });
@@ -248,6 +248,26 @@ async function touchDev(id) {
   const d = await load(), dv = (d.devices || []).find(x => x.id === id);
   if (dv) { dv.last = new Date().toISOString(); await save(d); }
 }
+const maskIp = ip => /^\d+\.\d+\.\d+\.\d+$/.test(ip) ? ip.replace(/\.\d+$/, '.x') : String(ip).split(':').slice(0, 3).join(':') + ':…';
+const isBot = ua => /bot|crawl|spider|preview|facebookexternalhit|whatsapp|telegram|slurp|monitor|uptime/i.test(String(ua || ''));
+app.post('/api/hello', limiter(240, 3600e3), wrap(async (req, res) => {
+  const ua = req.headers['user-agent'];
+  if (isBot(ua)) return res.json({ ok: true });
+  let id = devCookie(req); const adm = isAdmin(req);
+  if (id && Date.now() - (touched.get(id) || 0) < 3 * 60e3) return res.json({ ok: true });
+  const d = await load(), now = Date.now(), info = uaInfo(ua);
+  if (!id) id = crypto.randomBytes(8).toString('hex');
+  touched.set(id, now);
+  let dv = d.devices.find(x => x.id === id);
+  if (!dv) { dv = { id, first: new Date(now).toISOString(), visits: 0, logins: 0 }; d.devices.unshift(dv); }
+  if (!dv.last || now - new Date(dv.last) > 30 * 60e3) dv.visits = (dv.visits || 0) + 1;
+  Object.assign(dv, { name: info.name, type: info.type, ip: adm ? cleanIp(req) : maskIp(cleanIp(req)), last: new Date(now).toISOString(), lastRole: adm ? 'admin' : 'buyer' });
+  if (adm) dv.admin = true;
+  d.devices = d.devices.slice(0, 300);
+  await save(d);
+  res.cookie('adev', id, adevOpts(req)); res.json({ ok: true });
+}));
+app.post('/api/admin/devices-clear-buyers', needAdmin, wrap(async (req, res) => { const d = await load(); d.devices = (d.devices || []).filter(x => x.admin); await save(d); res.json({ ok: true }); }));
 app.get('/api/admin/devices', needAdmin, wrap(async (req, res) => { const d = await load(); res.json({ current: devCookie(req), devices: d.devices || [], fails: d.loginFails || [] }); }));
 app.delete('/api/admin/devices/:id', needAdmin, wrap(async (req, res) => { const d = await load(); d.devices = (d.devices || []).filter(x => x.id !== req.params.id); await save(d); res.json({ ok: true }); }));
 app.post('/api/logout', (req, res) => { res.clearCookie('admin', { path: '/' }); res.json({ admin: false }); });
@@ -395,6 +415,7 @@ app.post('/api/orders', orderLimit, wrap(async (req, res) => {
   const final = Math.round((total - discount) * 100) / 100;
   const oid = crypto.randomBytes(6).toString('hex');
   d.orders.unshift({ id: oid, status: 'new', step: 0, stepTimes: { 0: new Date().toISOString() }, items, total: final, subtotal: total, discount, promo, consent: new Date().toISOString(), gift: !!req.body.gift, giftNote: String(req.body.giftNote || '').slice(0, 200), name, phone, date: new Date().toISOString(), paid: false });
+  { const dvx = (d.devices || []).find(x => x.id === devCookie(req)); if (dvx) { dvx.orders = [oid, ...(dvx.orders || [])].slice(0, 20); dvx.customer = name; } }
   await save(d);
   const LOW = parseInt(process.env.LOW_STOCK || '2'), low = [];
   for (const i of items) {
