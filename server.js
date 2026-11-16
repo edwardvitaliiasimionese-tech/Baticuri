@@ -17,7 +17,7 @@ const DEFAULT = () => ({ settings: { shop: 'Magazinul meu', holder: '', iban: ''
 const HASH = x => crypto.createHash('sha256').update(x + KEY).digest('hex').slice(0, 24);
 const DBN = 'db-' + HASH('db') + '.json';
 let legacyGone = false, lastBackup = '';
-const fixDb = d => { d.orders = d.orders || []; d.categories = d.categories || []; d.promos = d.promos || []; d.waitlist = d.waitlist || []; d.trash = d.trash || []; d.subs = d.subs || []; d.reviews = d.reviews || []; return d; };
+const fixDb = d => { d.orders = d.orders || []; d.categories = d.categories || []; d.promos = d.promos || []; d.waitlist = d.waitlist || []; d.trash = d.trash || []; d.subs = d.subs || []; d.reviews = d.reviews || []; d.devices = d.devices || []; d.loginFails = d.loginFails || []; return d; };
 async function load() {
   let r = await fetch(`${OBJ}/${BUCKET}/${DBN}?t=${Date.now()}`, { headers: H() });
   if (!r.ok && (r.status === 400 || r.status === 404)) r = await fetch(`${OBJ}/${BUCKET}/db.json?t=${Date.now()}`, { headers: H() });
@@ -191,14 +191,65 @@ app.get('/', wrap(async (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/shop', wrap(async (req, res) => { const d = await load(); res.json({ settings: isAdmin(req) ? d.settings : { shop: d.settings.shop, wa: d.settings.wa, about: d.settings.about, zone: d.settings.zone, vacation: !!d.settings.vacation, vacMsg: d.settings.vacMsg, theme: d.settings.theme || 'noir', reviews: d.settings.reviews, banner: d.settings.banner }, items: d.items.filter(it => !it.hidden || isAdmin(req)).map(it => view(d, it)), categories: d.categories || [], steps: getSteps(d) }); }));
-app.get('/api/me', (req, res) => res.json({ admin: isAdmin(req) }));
+app.get('/api/me', wrap(async (req, res) => {
+  const adm = isAdmin(req);
+  if (adm) {
+    const id = devCookie(req);
+    if (!id) { try { const d = await load(), rec = recordLogin(req, d); await save(d); res.cookie('adev', rec.id, adevOpts(req)); } catch (e) {} }
+    else touchDev(id).catch(() => {});
+  }
+  res.json({ admin: adm });
+}));
 
-app.post('/api/login', throttle, (req, res) => {
+const cleanIp = req => String(req.ip || '').replace('::ffff:', '');
+const devCookie = req => (/(?:^|;\s*)adev=([a-f0-9]{16})/.exec(req.headers.cookie || '') || [])[1] || '';
+function uaInfo(ua) {
+  ua = String(ua || '');
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : 'Necunoscut';
+  const br = /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /EdgA?\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /CriOS|Chrome/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'Browser';
+  const type = /iPad|Tablet/.test(ua) || (/Android/.test(ua) && !/Mobile/.test(ua)) ? 'tablet' : /Mobile|iPhone|Android/.test(ua) ? 'mobile' : 'desktop';
+  return { name: os + ' · ' + br, type };
+}
+function recordLogin(req, d) {
+  d.devices = d.devices || [];
+  const id = devCookie(req) || crypto.randomBytes(8).toString('hex'), info = uaInfo(req.headers['user-agent']), now = new Date().toISOString();
+  let dv = d.devices.find(x => x.id === id); const isNew = !dv;
+  if (!dv) { dv = { id, first: now, logins: 0 }; d.devices.unshift(dv); }
+  Object.assign(dv, { name: info.name, type: info.type, ip: cleanIp(req), last: now }); dv.logins = (dv.logins || 0) + 1;
+  d.devices = d.devices.slice(0, 50);
+  return { id, isNew, hadOthers: d.devices.length > 1, info };
+}
+const adevOpts = req => ({ httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 365 * 864e5, path: '/' });
+let lastFailSave = 0;
+app.post('/api/login', throttle, wrap(async (req, res) => {
   const a = Buffer.from(String(req.body.password || '')), b = Buffer.from(PASS);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: 'Parolă incorectă' });
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    if (Date.now() - lastFailSave > 30e3) {
+      lastFailSave = Date.now();
+      try { const d = await load(); d.loginFails = [{ t: new Date().toISOString(), ip: cleanIp(req), name: uaInfo(req.headers['user-agent']).name }, ...(d.loginFails || [])].slice(0, 30); await save(d); } catch (e) {}
+    }
+    return res.status(401).json({ error: 'Parolă incorectă' });
+  }
   res.cookie('admin', TOKEN, { httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 30 * 864e5, path: '/' });
+  try {
+    const d = await load(), rec = recordLogin(req, d); await save(d);
+    res.cookie('adev', rec.id, adevOpts(req));
+    if (rec.isNew && rec.hadOthers) {
+      notify('🔐 Conectare nouă ca vânzător\n' + rec.info.name + ' · IP ' + cleanIp(req) + '\nDacă nu ai fost tu, schimbă parola pe Render.');
+      pushTo(d, x => x.role === 'admin' && Date.now() - (x.adminAt || 0) < 30 * 864e5, { title: '🔐 Conectare nouă', body: rec.info.name, tag: 'login', url: '/' }).catch(() => {});
+    }
+  } catch (e) { console.error('Dispozitiv:', e); }
   res.json({ admin: true });
-});
+}));
+const touched = new Map();
+async function touchDev(id) {
+  if (Date.now() - (touched.get(id) || 0) < 10 * 60e3) return;
+  touched.set(id, Date.now());
+  const d = await load(), dv = (d.devices || []).find(x => x.id === id);
+  if (dv) { dv.last = new Date().toISOString(); await save(d); }
+}
+app.get('/api/admin/devices', needAdmin, wrap(async (req, res) => { const d = await load(); res.json({ current: devCookie(req), devices: d.devices || [], fails: d.loginFails || [] }); }));
+app.delete('/api/admin/devices/:id', needAdmin, wrap(async (req, res) => { const d = await load(); d.devices = (d.devices || []).filter(x => x.id !== req.params.id); await save(d); res.json({ ok: true }); }));
 app.post('/api/logout', (req, res) => { res.clearCookie('admin', { path: '/' }); res.json({ admin: false }); });
 
 app.put('/api/settings', needAdmin, wrap(async (req, res) => {
