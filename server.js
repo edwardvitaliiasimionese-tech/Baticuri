@@ -592,6 +592,54 @@ app.get('/api/dash/backup', needDash, wrap(async (req, res) => {
   const d = await load(); res.set('Content-Disposition', 'attachment; filename="backup-' + new Date().toISOString().slice(0, 10) + '.json"'); res.json(d);
 }));
 
+const AI_KEY = process.env.ANTHROPIC_API_KEY, AI_MODEL = process.env.AI_MODEL || 'claude-haiku-5-5', AI_LIMIT = parseInt(process.env.AI_DAILY_LIMIT || '50');
+let aiDay = '', aiCount = 0;
+function aiClean(raw, cats) {
+  const m = String(raw || '').match(/\{[\s\S]*\}/); if (!m) return null;
+  let o; try { o = JSON.parse(m[0]); } catch (e) { return null; }
+  const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const cat = (Array.isArray(cats) ? cats : []).find(c => c.id === o.category);
+  const sub = cat && (cat.subs || []).find(x => x.id === o.sub);
+  return {
+    title: str(o.title, 100), description: str(o.description, 600),
+    color: /^#[0-9a-f]{6}$/i.test(str(o.color, 7)) ? str(o.color, 7) : '', colorName: str(o.colorName, 30),
+    category: cat ? cat.id : '', categoryName: cat ? cat.name : '', sub: sub ? sub.id : '', subName: sub ? sub.name : '',
+    tips: (Array.isArray(o.tips) ? o.tips : []).slice(0, 5).map(t => str(t, 160)).filter(Boolean)
+  };
+}
+app.post('/api/ai/photo', needAdmin, limiter(60, 3600e3), upload.single('image'), wrap(async (req, res) => {
+  if (!AI_KEY) return res.status(503).json({ error: 'AI nu este activat. Adaugă variabila ANTHROPIC_API_KEY pe Render (cheie de pe console.anthropic.com).' });
+  const day = new Date().toISOString().slice(0, 10); if (day !== aiDay) { aiDay = day; aiCount = 0; }
+  if (aiCount >= AI_LIMIT) return res.status(429).json({ error: 'Limita zilnică pentru AI a fost atinsă (' + AI_LIMIT + '). Revino mâine sau mărește AI_DAILY_LIMIT pe Render.' });
+  let buf, mime = 'image/jpeg';
+  if (req.file) { buf = req.file.buffer; mime = req.file.mimetype; }
+  else {
+    const u = String(req.body.imageUrl || '');
+    if (!u.startsWith(URL_ + '/storage/v1/object/public/')) return res.status(400).json({ error: 'Poză invalidă.' });
+    const r = await fetch(u); if (!r.ok) return res.status(400).json({ error: 'Nu pot citi poza.' });
+    mime = (r.headers.get('content-type') || 'image/jpeg').split(';')[0]; buf = Buffer.from(await r.arrayBuffer());
+  }
+  if (!buf || buf.length > 5 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mime)) return res.status(400).json({ error: 'Poza nu este acceptată (JPG, PNG sau WEBP, maxim 5 MB).' });
+  let cats = []; try { cats = JSON.parse(req.body.cats || '[]'); } catch (e) {}
+  const prompt = 'Ești asistentul unui magazin online mic. Analizează fotografia produsului. Răspunde DOAR cu un obiect JSON valid, fără alt text, cu cheile: '
+    + 'title (titlu scurt și elegant în română, maxim 60 de caractere, fără preț), '
+    + 'description (2-3 propoziții în română, ton elegant; nu inventa materiale, dimensiuni sau brand pe care nu le vezi), '
+    + 'color (culoarea dominantă a produsului, format #rrggbb), colorName (numele culorii în română), '
+    + 'category (id-ul categoriei potrivite din lista de mai jos, sau ""), sub (id-ul subcategoriei, sau ""), '
+    + 'tips (listă de 0 până la 4 sfaturi scurte în română pentru o fotografie mai bună: lumină, claritate, fundal, încadrare; listă goală dacă poza este bună). '
+    + 'Categorii disponibile: ' + JSON.stringify(cats).slice(0, 3000);
+  aiCount++;
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', headers: { 'x-api-key': AI_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({ model: AI_MODEL, max_tokens: 900, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mime, data: buf.toString('base64') } }, { type: 'text', text: prompt }] }] })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { console.error('AI:', r.status, JSON.stringify(j).slice(0, 300)); return res.status(502).json({ error: 'AI: ' + ((j.error && j.error.message) || r.status) }); }
+  const out = aiClean((j.content || []).map(c => c.text || '').join(''), cats);
+  if (!out) return res.status(502).json({ error: 'AI a dat un răspuns neașteptat. Încearcă din nou.' });
+  res.json(out);
+}));
+
 app.get('/api/backup', needAdmin, wrap(async (req, res) => {
   const d = await load();
   res.set('Content-Disposition', 'attachment; filename="backup-' + new Date().toISOString().slice(0, 10) + '.json"'); res.json(d);
