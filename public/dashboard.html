@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Dashboard</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
@@ -29,7 +32,7 @@ input{font:inherit;width:100%;padding:12px;border-radius:2px;border:1px solid va
 .kg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
 .k{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:12px}
 .kl{color:var(--mut);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase}
-.kv{font-family:'Cormorant Garamond',Georgia,serif;font-size:1.7rem;font-weight:600;color:var(--pk);line-height:1.15;margin-top:2px}
+.kv{font-family:'Cormorant Garamond',Georgia,serif;font-size:1.7rem;font-weight:700;color:var(--pk);line-height:1.15;margin-top:2px}
 .ks{color:var(--mut);font-size:.72rem}
 .pg{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
 .panel{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:14px;min-width:0}
@@ -43,6 +46,7 @@ th,td{padding:7px 6px;border-bottom:1px solid var(--bd);text-align:left;vertical
 .mut{color:var(--mut)}.ok{color:var(--ok)}.bad{color:var(--red)}
 .pill{display:inline-block;border:1px solid var(--bd);border-radius:999px;padding:2px 9px;font-size:.72rem;margin:0 6px 6px 0}
 .login{max-width:340px;margin:12vh auto 0;text-align:center;display:flex;flex-direction:column;gap:12px}.login a{color:var(--mut);font-size:.8rem}.err{color:var(--red);min-height:1.2em;font-size:.8rem}
+button,.btn{border-radius:12px}input{border-radius:12px}.k,.panel{border-radius:16px}
 </style>
 </head>
 <body>
@@ -92,7 +96,7 @@ function render(){
    p('Comenzi pe luni',barChart(D.monthly,'n',r=>r.m,num))+
    p('Articole cele mai comandate',hbars(D.topItems,r=>r.title,r=>r.units,num,r=>r.paidUnits+' plătite · '+eur(r.revenue)+' încasat'))+
    p('Venituri pe categorii',hbars(D.categories,r=>r.name,r=>r.revenue,eur))+
-   p('Stadiul comenzilor (toate)',['new','confirmed','ready','delivered'].map(x=>'<span class="pill">'+PIPE[x]+' : <b>'+(D.pipeline[x]||0)+'</b></span>').join(''))+
+   p('Stadiul comenzilor (toate)',D.pipeline.map(x=>'<span class="pill">'+esc(x.t)+' : <b>'+x.n+'</b></span>').join(''))+
    p('Stoc',
      '<div><span class="pill">Articole : <b>'+st.items+'</b></span><span class="pill">Ascunse : <b>'+st.hidden+'</b></span><span class="pill">În gunoi : <b>'+st.trash+'</b></span></div>'+
      '<h2 style="font-size:1rem;margin-top:8px">Stoc redus</h2>'+(st.low.length?tbl([['Articol'],['Rămase',1]],st.low.map(x=>[esc(x.title),'<b class="bad">'+x.left+'</b> / '+x.qty])):'<p class="mut">Totul este în regulă.</p>')+
