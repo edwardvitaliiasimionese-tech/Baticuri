@@ -593,6 +593,8 @@ app.get('/api/dash/backup', needDash, wrap(async (req, res) => {
 }));
 
 const AI_KEY = process.env.ANTHROPIC_API_KEY, AI_MODEL = process.env.AI_MODEL || 'claude-haiku-5-5', AI_LIMIT = parseInt(process.env.AI_DAILY_LIMIT || '50');
+const GEM_KEY = process.env.GEMINI_API_KEY, GEM_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+const AI_PROVIDER = process.env.AI_PROVIDER || (GEM_KEY ? 'gemini' : AI_KEY ? 'claude' : '');
 let aiDay = '', aiCount = 0;
 function aiClean(raw, cats) {
   const m = String(raw || '').match(/\{[\s\S]*\}/); if (!m) return null;
@@ -608,7 +610,7 @@ function aiClean(raw, cats) {
   };
 }
 app.post('/api/ai/photo', needAdmin, limiter(60, 3600e3), upload.single('image'), wrap(async (req, res) => {
-  if (!AI_KEY) return res.status(503).json({ error: 'AI nu este activat. Adaugă variabila ANTHROPIC_API_KEY pe Render (cheie de pe console.anthropic.com).' });
+  if (!AI_PROVIDER) return res.status(503).json({ error: 'AI nu este activat. Adaugă variabila GEMINI_API_KEY pe Render (cheie gratuită de pe aistudio.google.com).' });
   const day = new Date().toISOString().slice(0, 10); if (day !== aiDay) { aiDay = day; aiCount = 0; }
   if (aiCount >= AI_LIMIT) return res.status(429).json({ error: 'Limita zilnică pentru AI a fost atinsă (' + AI_LIMIT + '). Revino mâine sau mărește AI_DAILY_LIMIT pe Render.' });
   let buf, mime = 'image/jpeg';
@@ -629,13 +631,28 @@ app.post('/api/ai/photo', needAdmin, limiter(60, 3600e3), upload.single('image')
     + 'tips (listă de 0 până la 4 sfaturi scurte în română pentru o fotografie mai bună: lumină, claritate, fundal, încadrare; listă goală dacă poza este bună). '
     + 'Categorii disponibile: ' + JSON.stringify(cats).slice(0, 3000);
   aiCount++;
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST', headers: { 'x-api-key': AI_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: AI_MODEL, max_tokens: 900, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mime, data: buf.toString('base64') } }, { type: 'text', text: prompt }] }] })
-  });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) { console.error('AI:', r.status, JSON.stringify(j).slice(0, 300)); return res.status(502).json({ error: 'AI: ' + ((j.error && j.error.message) || r.status) }); }
-  const out = aiClean((j.content || []).map(c => c.text || '').join(''), cats);
+  let text = '';
+  if (AI_PROVIDER === 'gemini') {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(GEM_MODEL) + ':generateContent', {
+      method: 'POST', headers: { 'x-goog-api-key': GEM_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mime, data: buf.toString('base64') } }, { text: prompt }] }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2048 } })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      console.error('AI Gemini:', r.status, JSON.stringify(j).slice(0, 300));
+      return res.status(r.status === 429 ? 429 : 502).json({ error: r.status === 429 ? 'Limita gratuită Google a fost atinsă. Încearcă din nou peste un minut sau mâine.' : 'AI: ' + ((j.error && j.error.message) || r.status) });
+    }
+    text = (((j.candidates || [])[0] || {}).content || {}).parts ? j.candidates[0].content.parts.map(x => x.text || '').join('') : '';
+  } else {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers: { 'x-api-key': AI_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: AI_MODEL, max_tokens: 900, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mime, data: buf.toString('base64') } }, { type: 'text', text: prompt }] }] })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { console.error('AI:', r.status, JSON.stringify(j).slice(0, 300)); return res.status(502).json({ error: 'AI: ' + ((j.error && j.error.message) || r.status) }); }
+    text = (j.content || []).map(c => c.text || '').join('');
+  }
+  const out = aiClean(text, cats);
   if (!out) return res.status(502).json({ error: 'AI a dat un răspuns neașteptat. Încearcă din nou.' });
   res.json(out);
 }));
