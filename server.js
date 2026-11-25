@@ -62,7 +62,7 @@ const oitems = o => o.items || [{ id: o.itemId, title: o.title, price: o.price }
 const lineQty = (o, key) => oitems(o).filter(i => i.id === key).reduce((t, i) => t + (i.qty || 1), 0);
 const paidQty = (d, key) => d.orders.filter(o => o.paid).reduce((t, o) => t + lineQty(o, key), 0);
 const pendQty = (d, key) => d.orders.filter(o => !o.paid).reduce((t, o) => t + lineQty(o, key), 0);
-const stock = x => Math.max(1, parseInt(x.qty) || 1);
+const stock = x => { const n = parseInt(x.qty); return Number.isFinite(n) ? Math.max(0, n) : 1; };
 const leftOf = (d, key, x) => Math.max(0, stock(x) - paidQty(d, key) - pendQty(d, key));
 const sync = d => d.items.forEach(it => {
   if (it.variants && it.variants.length) { it.variants.forEach(v => { v.sold = paidQty(d, it.id + ':' + v.id) >= stock(v); }); it.sold = it.variants.every(v => v.sold); }
@@ -70,11 +70,11 @@ const sync = d => d.items.forEach(it => {
 });
 const view = (d, it) => {
   if (it.variants && it.variants.length) {
-    const variants = it.variants.map(v => { const left = leftOf(d, it.id + ':' + v.id, v); return { ...v, qty: stock(v), left, reserved: !v.sold && left === 0 }; });
-    return { ...it, variants, reserved: !it.sold && variants.filter(v => !v.sold).every(v => v.reserved) };
+    const variants = it.variants.map(v => { const left = leftOf(d, it.id + ':' + v.id, v); return { ...v, qty: stock(v), left, reserved: !v.sold && left === 0, oos: stock(v) === 0 }; });
+    return { ...it, variants, reserved: !it.sold && variants.filter(v => !v.sold).every(v => v.reserved), oos: variants.every(v => v.oos) };
   }
   const left = leftOf(d, it.id, it);
-  return { ...it, qty: stock(it), left, reserved: !it.sold && left === 0 };
+  return { ...it, qty: stock(it), left, reserved: !it.sold && left === 0, oos: stock(it) === 0 };
 };
 const resolve = (d, key) => {
   const [iid, vid] = String(key).split(':'), it = d.items.find(x => x.id === iid);
@@ -87,7 +87,7 @@ const hex = c => /^#[0-9a-f]{6}$/i.test(String(c || '')) ? String(c) : '';
 const catOk = (d, c, sb) => { const cat = (d.categories || []).find(x => x.id === String(c || '')); return cat ? { cat: cat.id, sub: (cat.subs || []).some(x => x.id === String(sb || '')) ? String(sb) : undefined } : {}; };
 const bd = b => ['Nou', 'Reducere', 'Recomandat', 'Ediție limitată', 'Ultimul exemplar'].includes(b) ? b : undefined;
 const op = v => parseFloat(v) > 0 ? Math.round(parseFloat(v) * 100) / 100 : undefined;
-const qn = x => Math.max(1, Math.min(999, parseInt(x) || 1));
+const qn = x => { const n = parseInt(x); return Number.isFinite(n) ? Math.max(0, Math.min(999, n)) : 1; };
 const parseVariants = (raw, old) => {
   let a; try { a = JSON.parse(raw || '[]'); } catch (e) { a = []; }
   if (!Array.isArray(a)) a = [];
@@ -96,7 +96,7 @@ const parseVariants = (raw, old) => {
     const name = String(v.name || '').trim().slice(0, 60), price = parseFloat(v.price);
     if (!name || !isFinite(price) || price < 0) return null;
     const prev = (old || []).find(x => x.id === v.id);
-    out.push({ id: prev ? prev.id : crypto.randomBytes(4).toString('hex'), name, price, sold: prev ? !!prev.sold : false, img: prev && v.img && v.img === prev.img ? prev.img : '', color: hex(v.color), qty: qn(v.qty) });
+    out.push({ id: prev ? prev.id : crypto.randomBytes(4).toString('hex'), name, price, sold: prev ? !!prev.sold : false, img: prev && v.img && v.img === prev.img ? prev.img : '', color: hex(v.color), qty: qn(v.qty), isNew: prev && prev.isNew ? prev.isNew : undefined });
   }
   return out;
 };
@@ -298,6 +298,8 @@ app.put('/api/items/:id', needAdmin, vfields, wrap(async (req, res) => {
   if (!it) return res.status(404).json({ error: 'Negăsit' });
   const title = String(req.body.title || '').trim().slice(0, 100);
   const variants = parseVariants(req.body.variants, it.variants);
+  const hadVars = (it.variants || []).length > 0, oldIds = new Set((it.variants || []).map(v => v.id)), addedV = hadVars ? variants.filter(v => !oldIds.has(v.id)) : [];
+  addedV.forEach(v => { v.isNew = Date.now(); });
   if (variants === null) return res.status(400).json({ error: 'Fiecare variantă are nevoie de nume și preț' });
   const price = variants.length ? Math.min(...variants.map(v => v.price)) : parseFloat(req.body.price);
   if (!title || !isFinite(price) || price < 0) return res.status(400).json({ error: 'Titlul și prețul sunt obligatorii' });
@@ -309,9 +311,10 @@ app.put('/api/items/:id', needAdmin, vfields, wrap(async (req, res) => {
   const oldVImgs = (it.variants || []).map(v => v.img).filter(Boolean);
   await applyVariantImages(req, variants);
   const removed = it.imgs.filter(u => !keep.includes(u));
-  it.title = title; it.desc = String(req.body.desc || '').trim().slice(0, 2000); it.price = price; delete it.cat; delete it.sub; Object.assign(it, catOk(d, req.body.cat, req.body.sub)); it.color = hex(req.body.color); it.badge = bd(req.body.badge); it.oldPrice = op(req.body.oldPrice); it.qty = qn(req.body.qty); it.variants = variants.length ? variants : undefined; sync(d);
+  it.title = title; it.desc = String(req.body.desc || '').trim().slice(0, 2000); it.price = price; delete it.cat; delete it.sub; Object.assign(it, catOk(d, req.body.cat, req.body.sub)); it.color = hex(req.body.color); it.badge = bd(req.body.badge); it.oldPrice = op(req.body.oldPrice); it.qty = qn(req.body.qty); if (addedV.length && !it.hidden) it.newVarAt = Date.now(); it.variants = variants.length ? variants : undefined; sync(d);
   it.imgs = [...keep, ...added].slice(0, 6);
   await save(d); removed.forEach(delImage);
+  if (addedV.length && !it.hidden) pushTo(d, () => true, { title: '✨ Variantă nouă', body: it.title + ' – ' + addedV.map(v => v.name).join(', '), tag: 'new-items', url: '/?a=' + it.id }).catch(() => {});
   const keepV = new Set(variants.map(v => v.img)); oldVImgs.filter(u => !keepV.has(u)).forEach(delImage);
   res.json(it);
 }));
